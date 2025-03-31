@@ -78,9 +78,20 @@ export class EditComponent implements OnInit, OnDestroy {
     { name: '525 (default)', value: 525 },
     { name: '550', value: 550 },
     { name: '575', value: 575 },
-    //{ name: '596', value: 596 },
+    { name: '596', value: 596 },
     { name: '600', value: 600 },
     { name: '625', value: 625 },
+    { name: '650', value: 650 },
+    { name: '675', value: 675 },
+    { name: '700', value: 700 },
+    { name: '725', value: 725 },
+    { name: '750', value: 750 },
+    { name: '775', value: 775 },
+    { name: '800', value: 800 },
+    { name: '825', value: 825 },
+    { name: '850', value: 850 },
+    { name: '875', value: 875 },
+    { name: '900', value: 900 },
   ];
 
   public BM1370CoreVoltage = [
@@ -90,6 +101,16 @@ export class EditComponent implements OnInit, OnDestroy {
     { name: '1150 (default)', value: 1150 },
     { name: '1200', value: 1200 },
     { name: '1250', value: 1250 },
+    { name: '1255', value: 1255 },
+    { name: '1260', value: 1260 },
+    { name: '1265', value: 1265 },
+    { name: '1270', value: 1270 },
+    { name: '1275', value: 1275 },
+    { name: '1280', value: 1280 },
+    { name: '1285', value: 1285 },
+    { name: '1290', value: 1290 },
+    { name: '1295', value: 1295 },
+    { name: '1300', value: 1300 }
   ];
 
   public BM1397CoreVoltage = [
