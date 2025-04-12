@@ -94,6 +94,7 @@ export class EditComponent implements OnInit, OnDestroy {
   public presetName: string = '';
   public presets: OverclockPreset[] = [];
   public showPresetDialog: boolean = false;
+  public editingPreset: OverclockPreset | null = null;
   
   @Input() uri = '';
 
@@ -588,16 +589,51 @@ export class EditComponent implements OnInit, OnDestroy {
     }
   }
   
+  // Get the currently selected preset based on form values
+  public get selectedPreset(): OverclockPreset | null {
+    if (!this.form) return null;
+    
+    const currentFrequency = this.form.get('frequency')?.value;
+    const currentVoltage = this.form.get('coreVoltage')?.value;
+    
+    if (!currentFrequency || !currentVoltage) return null;
+    
+    return this.presets.find(preset => 
+      preset.frequency === currentFrequency && 
+      preset.coreVoltage === currentVoltage
+    ) || null;
+  }
+  
+  // Check if current values match any existing preset
+  public get hasMatchingPreset(): boolean {
+    return this.selectedPreset !== null;
+  }
+  
+  // Open dialog for editing a preset name
+  public editPresetName(preset: OverclockPreset, event: Event): void {
+    event.stopPropagation(); // Prevent preset from being applied
+    
+    if (preset.builtIn) {
+      this.toastr.error(`Cannot edit built-in preset "${preset.name}"`, 'Error');
+      return;
+    }
+    
+    this.editingPreset = preset;
+    this.presetName = preset.name;
+    this.showPresetDialog = true;
+  }
+  
   /**
    * Open dialog to save the current settings as a preset
    */
   openSavePresetDialog(): void {
     this.presetName = '';
+    this.editingPreset = null;
     this.showPresetDialog = true;
   }
   
   /**
-   * Save current settings as a new preset
+   * Save current settings as a new preset or update existing
    */
   savePreset(): void {
     if (!this.presetName.trim()) {
@@ -607,37 +643,78 @@ export class EditComponent implements OnInit, OnDestroy {
     
     const formValues = this.form.getRawValue();
     
-    // Create new preset
-    const newPreset: OverclockPreset = {
-      name: this.presetName.trim(),
-      frequency: formValues.frequency,
-      coreVoltage: formValues.coreVoltage,
-      timestamp: Date.now(),
-      asicModel: this.ASICModel
-    };
-    
-    // Check if a preset with this name already exists
-    const existingIndex = this.presets.findIndex(p => p.name === newPreset.name);
-    if (existingIndex >= 0) {
-      // Replace existing preset
-      this.presets[existingIndex] = newPreset;
+    if (this.editingPreset) {
+      // Editing existing preset - just update the name
+      this.editingPreset.name = this.presetName.trim();
+      this.toastr.success(`Preset name updated to "${this.presetName}"`, 'Success');
     } else {
-      // Add new preset
-      this.presets.push(newPreset);
+      // Create new preset
+      const newPreset: OverclockPreset = {
+        name: this.presetName.trim(),
+        frequency: formValues.frequency,
+        coreVoltage: formValues.coreVoltage,
+        timestamp: Date.now(),
+        asicModel: this.ASICModel
+      };
+      
+      // Check if a preset with this name already exists
+      const existingIndex = this.presets.findIndex(p => p.name === newPreset.name);
+      if (existingIndex >= 0) {
+        // Replace existing preset
+        this.presets[existingIndex] = newPreset;
+      } else {
+        // Add new preset
+        this.presets.push(newPreset);
+      }
+      
+      this.toastr.success(`Preset "${this.presetName}" saved successfully`, 'Success');
     }
     
-    // Sort by most recent
-    this.presets.sort((a, b) => b.timestamp - a.timestamp);
+    // Sort by most recent, keeping built-ins at top
+    this.sortPresets();
     
     // Save to localStorage
     this.savePresetsToStorage();
     
     // Close dialog
     this.showPresetDialog = false;
-    
-    this.toastr.success(`Preset "${this.presetName}" saved successfully`, 'Success');
+    this.editingPreset = null;
   }
   
+  /**
+   * Sort presets with built-ins at top, then by timestamp
+   */
+  private sortPresets(): void {
+    this.presets.sort((a, b) => {
+      // Keep built-in presets at the top
+      if (a.builtIn && !b.builtIn) return -1;
+      if (!a.builtIn && b.builtIn) return 1;
+      // Otherwise sort by timestamp (most recent first)
+      return b.timestamp - a.timestamp;
+    });
+  }
+  
+  /**
+   * Check if preset matches current values
+   */
+  public presetMatchesCurrentValues(preset: OverclockPreset): boolean {
+    if (!this.form) return false;
+    
+    const currentFrequency = this.form.get('frequency')?.value;
+    const currentVoltage = this.form.get('coreVoltage')?.value;
+    
+    return preset.frequency === currentFrequency && 
+           preset.coreVoltage === currentVoltage;
+  }
+
+  /**
+   * Acknowledge the warning message and save to localStorage
+   */
+  acknowledgeWarning(): void {
+    this.warningAcknowledged = true;
+    localStorage.setItem(this.STORAGE_KEY_WARNING, 'true');
+  }
+
   /**
    * Apply settings from a preset
    */
@@ -681,13 +758,6 @@ export class EditComponent implements OnInit, OnDestroy {
    */
   cancelSavePreset(): void {
     this.showPresetDialog = false;
-  }
-
-  /**
-   * Acknowledge the warning message and save to localStorage
-   */
-  acknowledgeWarning(): void {
-    this.warningAcknowledged = true;
-    localStorage.setItem(this.STORAGE_KEY_WARNING, 'true');
+    this.editingPreset = null;
   }
 }

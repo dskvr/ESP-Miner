@@ -51,25 +51,38 @@
                         <div class="preset-container">
                             <div class="preset-actions">
                                 <button pButton type="button" icon="pi pi-save" label="Save Current Settings"
-                                        class="p-button-sm p-button-outlined" (click)="openSavePresetDialog()"></button>
+                                        class="p-button-sm p-button-success" (click)="openSavePresetDialog()"></button>
                             </div>
                             <div class="preset-list" *ngIf="presets.length > 0">
-                                <div *ngFor="let preset of presets" class="preset-item" [ngClass]="{'built-in': preset.builtIn}" (click)="applyPreset(preset)">
+                                <div *ngFor="let preset of presets" 
+                                     class="preset-item" 
+                                     [ngClass]="{'built-in': preset.builtIn, 'selected': presetMatchesCurrentValues(preset)}" 
+                                     (click)="applyPreset(preset)">
                                     <div class="preset-details">
                                         <h4 class="preset-name">
                                             {{preset.name}}
                                             <span *ngIf="preset.builtIn" class="built-in-badge">Built-in</span>
+                                            <span *ngIf="presetMatchesCurrentValues(preset)" class="selected-badge">Selected</span>
                                         </h4>
                                         <div class="preset-values">
                                             <span>F: {{preset.frequency}}MHz</span>
                                             <span>V: {{preset.coreVoltage}}mV</span>
                                         </div>
                                     </div>
-                                    <button pButton type="button" icon="pi pi-trash" 
-                                            class="p-button-sm p-button-secondary delete-button"
-                                            (click)="deletePreset(preset, $event)"
-                                            [disabled]="preset.builtIn" 
-                                            [pTooltip]="preset.builtIn ? 'Built-in presets cannot be deleted' : 'Delete preset'"></button>
+                                    <div class="preset-actions-container">
+                                        <button *ngIf="!preset.builtIn" 
+                                                pButton type="button" 
+                                                icon="pi pi-pencil" 
+                                                class="p-button-sm p-button-info edit-button"
+                                                (click)="editPresetName(preset, $event)"
+                                                pTooltip="Edit preset name"></button>
+                                        <button pButton type="button" 
+                                                icon="pi pi-trash" 
+                                                class="p-button-sm p-button-danger delete-button"
+                                                (click)="deletePreset(preset, $event)"
+                                                [disabled]="preset.builtIn" 
+                                                [pTooltip]="preset.builtIn ? 'Built-in presets cannot be deleted' : 'Delete preset'"></button>
+                                    </div>
                                 </div>
                             </div>
                             <div *ngIf="presets.length === 0" class="preset-empty">
@@ -201,12 +214,12 @@
 </ng-container>
 
 <!-- Save Preset Dialog -->
-<p-dialog header="Save Preset" [(visible)]="showPresetDialog" [style]="{width: '450px'}" [modal]="true">
+<p-dialog [header]="editingPreset ? 'Edit Preset Name' : 'Save Preset'" [(visible)]="showPresetDialog" [style]="{width: '450px'}" [modal]="true">
     <div class="field">
         <label for="presetName">Preset Name</label>
         <input type="text" pInputText id="presetName" [(ngModel)]="presetName" style="width: 100%" />
     </div>
-    <div class="current-settings-preview">
+    <div class="current-settings-preview" *ngIf="!editingPreset">
         <div class="preview-item">
             <label>Frequency:</label>
             <span>{{ form?.get('frequency')?.value || 0 }} MHz</span>
@@ -215,9 +228,18 @@
             <label>Core Voltage:</label>
             <span>{{ form?.get('coreVoltage')?.value || 0 }} mV</span>
         </div>
+        <div *ngIf="hasMatchingPreset" class="duplicate-warning">
+            <i class="pi pi-exclamation-triangle"></i>
+            <span>These settings match an existing preset: <strong>{{ selectedPreset?.name }}</strong></span>
+        </div>
     </div>
     <ng-template pTemplate="footer">
-        <button pButton pRipple label="Cancel" icon="pi pi-times" class="p-button-text" (click)="cancelSavePreset()"></button>
-        <button pButton pRipple label="Save" icon="pi pi-save" class="p-button-text" (click)="savePreset()"></button>
+        <button pButton pRipple label="Cancel" icon="pi pi-times" class="p-button" (click)="cancelSavePreset()"></button>
+        <button pButton pRipple 
+                [label]="editingPreset ? 'Update' : 'Save'" 
+                icon="pi pi-save" 
+                class="p-button-success" 
+                [disabled]="!editingPreset && hasMatchingPreset" 
+                (click)="savePreset()"></button>
     </ng-template>
 </p-dialog>
