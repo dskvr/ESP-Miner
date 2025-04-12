@@ -1,6 +1,7 @@
 <ng-container *ngIf="form != null">
     <form [formGroup]="form">
 
+        <h3>Overclocking</h3>
         <ng-container *ngIf="settingsUnlocked && !warningAcknowledged">
             <div class="custom-warning-message mb-3">
                 <div class="warning-icon">
@@ -49,10 +50,6 @@
                     <label class="col-12 mb-2 md:col-2 md:mb-0">Presets</label>
                     <div class="col-12 md:col-10">
                         <div class="preset-container">
-                            <div class="preset-actions">
-                                <button pButton type="button" icon="pi pi-save" label="Save Current Settings"
-                                        class="p-button-sm p-button-success" (click)="openSavePresetDialog()"></button>
-                            </div>
                             <div class="preset-list" *ngIf="presets.length > 0">
                                 <div *ngFor="let preset of presets" 
                                      class="preset-item" 
@@ -86,7 +83,7 @@
                                 </div>
                             </div>
                             <div *ngIf="presets.length === 0" class="preset-empty">
-                                <p>No saved presets. Save your current settings as a preset.</p>
+                                <p>No saved presets.</p>
                             </div>
                         </div>
                     </div>
@@ -147,6 +144,16 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="field grid p-fluid">
+                    <label htmlFor="coreVoltage" class="col-12 mb-2 md:col-2 md:mb-0"></label>
+                    <div class="col-12 md:col-10">
+                        <div class="preset-actions">
+                            <button pButton type="button" icon="pi pi-save" label="Save Settings As Preset"
+                                class="p-button-sm p-button-success save-preset-button" (click)="openSavePresetDialog()"></button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </ng-container>
 
@@ -160,21 +167,7 @@
             </small>
         </div>
 
-        <div class="col-12 md:col-4">
-            <div class="field-checkbox">
-                <p-checkbox name="flipscreen" formControlName="flipscreen" inputId="flipscreen"
-                    [binary]="true"></p-checkbox>
-                <label for="flipscreen">Flip Screen <i class="pi pi-info-circle" style="font-size: 0.8rem; margin-left: 0.2rem;" pTooltip="Rotates the LCD screen by 180 degrees"></i></label>
-            </div>
-        </div>
-
-        <div class="col-12">
-            <div class="field-checkbox">
-                <p-checkbox name="invertfanpolarity" formControlName="invertfanpolarity" inputId="invertfanpolarity"
-                    [binary]="true"></p-checkbox>
-                <label for="invertfanpolarity">Invert Fan Duty Cycle <i class="pi pi-info-circle" style="font-size: 0.8rem; margin-left: 0.2rem;" pTooltip="Inverting the polarity of the fan PWM signal"></i></label>
-            </div>
-        </div>
+        <h3>Cooling</h3>
         <div class="col-12">
             <div class="field-checkbox">
                 <p-checkbox name="autofanspeed" formControlName="autofanspeed" inputId="autofanspeed"
@@ -194,6 +187,25 @@
             </div>
         </div>
 
+        <h3>General</h3>
+
+        <div class="col-12 md:col-4">
+            <div class="field-checkbox">
+                <p-checkbox name="flipscreen" formControlName="flipscreen" inputId="flipscreen"
+                    [binary]="true"></p-checkbox>
+                <label for="flipscreen">Flip Screen <i class="pi pi-info-circle" style="font-size: 0.8rem; margin-left: 0.2rem;" pTooltip="Rotates the LCD screen by 180 degrees"></i></label>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="field-checkbox">
+                <p-checkbox name="invertfanpolarity" formControlName="invertfanpolarity" inputId="invertfanpolarity"
+                    [binary]="true"></p-checkbox>
+                <label for="invertfanpolarity">Invert Fan Duty Cycle <i class="pi pi-info-circle" style="font-size: 0.8rem; margin-left: 0.2rem;" pTooltip="Inverting the polarity of the fan PWM signal"></i></label>
+            </div>
+        </div>
+
+
         <div class="mt-2">
             <button pButton [disabled]="!form.dirty || form.invalid" (click)="updateSystem()"
                 class="btn btn-primary mr-2">Save</button>
@@ -202,6 +214,9 @@
 
         <div class="mt-2">
             <button pButton [disabled]="!savedChanges" (click)="restart()">Restart</button>
+        </div>
+
+        <div class="mt-2">
 
             <button *ngIf="settingsUnlocked" pButton pButton="p-button-danger" (click)="toggleOverclockMode(false)"
                     class="p-button-danger" pTooltip="Return to safe preset values only">

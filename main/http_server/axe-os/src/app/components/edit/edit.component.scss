@@ -63,8 +63,8 @@
 
 .preset-actions {
     margin-bottom: 1rem;
-    display: flex;
-    justify-content: flex-end;
+    display: inline-block;
+    // justify-content: flex-start;
 }
 
 .preset-list {
@@ -336,6 +336,10 @@
 .edit-button .pi-pencil, 
 .delete-button .pi-trash {
     font-size: 1rem;
+}
+
+.save-preset-button {
+    margin-top: 0.5rem !important;
 }
 
 /* Duplicate warning styling */
