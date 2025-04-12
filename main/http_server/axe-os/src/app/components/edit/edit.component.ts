@@ -8,6 +8,16 @@ import { SystemService } from 'src/app/services/system.service';
 import { eASICModel } from 'src/models/enum/eASICModel';
 import { ActivatedRoute } from '@angular/router';
 
+// Preset interface
+interface OverclockPreset {
+  name: string;
+  frequency: number;
+  coreVoltage: number;
+  timestamp: number;
+  asicModel: eASICModel;
+  builtIn?: boolean; // Flag for built-in presets that cannot be deleted
+}
+
 @Component({
   selector: 'app-edit',
   templateUrl: './edit.component.html',
@@ -27,6 +37,64 @@ export class EditComponent implements OnInit, OnDestroy {
   public restrictedModels: eASICModel[] = Object.values(eASICModel)
     .filter((v): v is eASICModel => typeof v === 'string');
 
+  // Default values for different ASIC models
+  public defaultFrequency: { [key in eASICModel]: number } = {
+    [eASICModel.BM1366]: 485,
+    [eASICModel.BM1368]: 490,
+    [eASICModel.BM1370]: 525,
+    [eASICModel.BM1397]: 425
+  };
+
+  public defaultVoltage: { [key in eASICModel]: number } = {
+    [eASICModel.BM1366]: 1200,
+    [eASICModel.BM1368]: 1166,
+    [eASICModel.BM1370]: 1150,
+    [eASICModel.BM1397]: 1300
+  };
+
+  // Maximum values for different ASIC models
+  public maxFrequency: { [key in eASICModel]: number } = {
+    [eASICModel.BM1366]: 650,
+    [eASICModel.BM1368]: 650,
+    [eASICModel.BM1370]: 925,
+    [eASICModel.BM1397]: 675
+  };
+
+  public maxVoltage: { [key in eASICModel]: number } = {
+    [eASICModel.BM1366]: 1350,
+    [eASICModel.BM1368]: 1350,
+    [eASICModel.BM1370]: 1350,
+    [eASICModel.BM1397]: 1550
+  };
+
+  // Minimum values for different ASIC models
+  public minFrequency: { [key in eASICModel]: number } = {
+    [eASICModel.BM1366]: 200,
+    [eASICModel.BM1368]: 200,
+    [eASICModel.BM1370]: 200,
+    [eASICModel.BM1397]: 200
+  };
+
+  public minVoltage: { [key in eASICModel]: number } = {
+    [eASICModel.BM1366]: 900,
+    [eASICModel.BM1368]: 900,
+    [eASICModel.BM1370]: 900,
+    [eASICModel.BM1397]: 900
+  };
+
+  // Increment options for buttons
+  public incrementOptions = [1, 10, 25, 50, 100];
+  
+  // Get reversed increment options for decrement buttons
+  public get reversedIncrementOptions(): number[] {
+    return [...this.incrementOptions].reverse();
+  }
+
+  // Preset management
+  public presetName: string = '';
+  public presets: OverclockPreset[] = [];
+  public showPresetDialog: boolean = false;
+  
   @Input() uri = '';
 
   public BM1397DropdownFrequency = [
@@ -142,6 +210,10 @@ export class EditComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
+  // Warning acknowledgment
+  public warningAcknowledged: boolean = false;
+  private readonly STORAGE_KEY_WARNING = 'overclockWarningAcknowledged';
+
   constructor(
     private fb: FormBuilder,
     private systemService: SystemService,
@@ -187,6 +259,9 @@ export class EditComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Check if warning has been acknowledged
+    this.warningAcknowledged = localStorage.getItem(this.STORAGE_KEY_WARNING) === 'true';
+
     this.systemService.getInfo(this.uri)
       .pipe(
         this.loadingService.lockUIUntilComplete(),
@@ -207,8 +282,8 @@ export class EditComponent implements OnInit, OnDestroy {
         this.form = this.fb.group({
           flipscreen: [info.flipscreen == 1],
           invertscreen: [info.invertscreen == 1],
-          coreVoltage: [info.coreVoltage, [Validators.required]],
-          frequency: [info.frequency, [Validators.required]],
+          coreVoltage: [info.coreVoltage, [Validators.required, Validators.min(this.minVoltage[this.ASICModel]), Validators.max(this.maxVoltage[this.ASICModel])]],
+          frequency: [info.frequency, [Validators.required, Validators.min(this.minFrequency[this.ASICModel]), Validators.max(this.maxFrequency[this.ASICModel])]],
           autofanspeed: [info.autofanspeed == 1, [Validators.required]],
           invertfanpolarity: [info.invertfanpolarity == 1, [Validators.required]],
           fanspeed: [info.fanspeed, [Validators.required]],
@@ -225,6 +300,9 @@ export class EditComponent implements OnInit, OnDestroy {
             this.form.controls['fanspeed'].enable();
           }
         });
+        
+        // Load saved presets
+        this.loadPresets();
       });
   }
 
@@ -350,4 +428,266 @@ export class EditComponent implements OnInit, OnDestroy {
     return options;
   }
 
+  // New methods for incremental adjustment
+  incrementValue(controlName: string, amount: number): void {
+    const control = this.form.get(controlName);
+    if (!control) return;
+    
+    let currentValue = control.value || 0;
+    let newValue = currentValue + amount;
+    
+    // Apply min/max constraints
+    if (controlName === 'frequency') {
+      newValue = Math.min(Math.max(newValue, this.minFrequency[this.ASICModel]), this.maxFrequency[this.ASICModel]);
+    } else if (controlName === 'coreVoltage') {
+      newValue = Math.min(Math.max(newValue, this.minVoltage[this.ASICModel]), this.maxVoltage[this.ASICModel]);
+    }
+    
+    control.setValue(newValue);
+    control.markAsDirty();
+  }
+
+  // Color calculation methods
+  getFrequencyColor(): string {
+    const currentFreq = this.form?.get('frequency')?.value;
+    if (!currentFreq) return 'var(--primary-color)';
+    
+    const defaultFreq = this.defaultFrequency[this.ASICModel];
+    const maxFreq = this.maxFrequency[this.ASICModel];
+    const minFreq = this.minFrequency[this.ASICModel];
+    
+    if (currentFreq === defaultFreq) {
+      return '#22c55e'; // Green for default
+    } else if (currentFreq < defaultFreq) {
+      // Scale from blue (min) to green (default)
+      const percentage = (currentFreq - minFreq) / (defaultFreq - minFreq);
+      return this.interpolateColor('#3b82f6', '#22c55e', percentage);
+    } else {
+      // Scale from green (default) to red (max)
+      const percentage = (currentFreq - defaultFreq) / (maxFreq - defaultFreq);
+      return this.interpolateColor('#22c55e', '#ef4444', percentage);
+    }
+  }
+  
+  getVoltageColor(): string {
+    const currentVoltage = this.form?.get('coreVoltage')?.value;
+    if (!currentVoltage) return 'var(--primary-color)';
+    
+    const defaultVoltage = this.defaultVoltage[this.ASICModel];
+    const maxVoltage = this.maxVoltage[this.ASICModel];
+    const minVoltage = this.minVoltage[this.ASICModel];
+    
+    if (currentVoltage === defaultVoltage) {
+      return '#22c55e'; // Green for default
+    } else if (currentVoltage < defaultVoltage) {
+      // Scale from blue (min) to green (default)
+      const percentage = (currentVoltage - minVoltage) / (defaultVoltage - minVoltage);
+      return this.interpolateColor('#3b82f6', '#22c55e', percentage);
+    } else {
+      // Scale from green (default) to red (max)
+      const percentage = (currentVoltage - defaultVoltage) / (maxVoltage - defaultVoltage);
+      return this.interpolateColor('#22c55e', '#ef4444', percentage);
+    }
+  }
+  
+  private interpolateColor(color1: string, color2: string, percentage: number): string {
+    // Ensure percentage is between 0 and 1
+    const clampedPercentage = Math.max(0, Math.min(1, percentage));
+    
+    // Convert hex to RGB
+    const r1 = parseInt(color1.substring(1, 3), 16);
+    const g1 = parseInt(color1.substring(3, 5), 16);
+    const b1 = parseInt(color1.substring(5, 7), 16);
+    
+    const r2 = parseInt(color2.substring(1, 3), 16);
+    const g2 = parseInt(color2.substring(3, 5), 16);
+    const b2 = parseInt(color2.substring(5, 7), 16);
+    
+    // Interpolate
+    const r = Math.round(r1 + (r2 - r1) * clampedPercentage);
+    const g = Math.round(g1 + (g2 - g1) * clampedPercentage);
+    const b = Math.round(b1 + (b2 - b1) * clampedPercentage);
+    
+    // Convert back to hex
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  }
+
+  // Preset Management Methods
+  
+  /**
+   * Create a default preset with factory values
+   */
+  private createDefaultPreset(): OverclockPreset {
+    return {
+      name: `Factory Default (${this.ASICModel})`,
+      frequency: this.defaultFrequency[this.ASICModel],
+      coreVoltage: this.defaultVoltage[this.ASICModel],
+      timestamp: 0, // Always keep at the top by using lowest timestamp
+      asicModel: this.ASICModel,
+      builtIn: true
+    };
+  }
+
+  /**
+   * Load all saved presets from localStorage
+   */
+  loadPresets(): void {
+    try {
+      const presetsJson = localStorage.getItem('overclockPresets');
+      if (presetsJson) {
+        // Load user-created presets
+        this.presets = JSON.parse(presetsJson);
+        // Filter presets for current ASIC model
+        this.presets = this.presets.filter(preset => preset.asicModel === this.ASICModel);
+      } else {
+        this.presets = [];
+      }
+      
+      // Add the built-in default preset
+      this.presets.unshift(this.createDefaultPreset());
+      
+      // Sort by most recent first, but keep built-in presets at the top
+      this.presets.sort((a, b) => {
+        // Keep built-in presets at the top
+        if (a.builtIn && !b.builtIn) return -1;
+        if (!a.builtIn && b.builtIn) return 1;
+        // Otherwise sort by timestamp (most recent first)
+        return b.timestamp - a.timestamp;
+      });
+    } catch (error) {
+      console.error('Error loading presets from localStorage', error);
+      this.toastr.error('Failed to load saved presets', 'Error');
+      // Ensure we at least have the default preset
+      this.presets = [this.createDefaultPreset()];
+    }
+  }
+  
+  /**
+   * Save all presets to localStorage
+   */
+  savePresetsToStorage(): void {
+    try {
+      // Get all existing presets for all models
+      let allPresets: OverclockPreset[] = [];
+      const presetsJson = localStorage.getItem('overclockPresets');
+      if (presetsJson) {
+        allPresets = JSON.parse(presetsJson);
+        // Remove presets for current model as we'll add updated ones
+        allPresets = allPresets.filter(preset => preset.asicModel !== this.ASICModel);
+      }
+      
+      // Add current model's presets, but filter out built-in presets
+      const userPresets = this.presets.filter(preset => !preset.builtIn);
+      allPresets = [...allPresets, ...userPresets];
+      
+      // Save back to localStorage
+      localStorage.setItem('overclockPresets', JSON.stringify(allPresets));
+    } catch (error) {
+      console.error('Error saving presets to localStorage', error);
+      this.toastr.error('Failed to save presets', 'Error');
+    }
+  }
+  
+  /**
+   * Open dialog to save the current settings as a preset
+   */
+  openSavePresetDialog(): void {
+    this.presetName = '';
+    this.showPresetDialog = true;
+  }
+  
+  /**
+   * Save current settings as a new preset
+   */
+  savePreset(): void {
+    if (!this.presetName.trim()) {
+      this.toastr.error('Please enter a name for the preset', 'Error');
+      return;
+    }
+    
+    const formValues = this.form.getRawValue();
+    
+    // Create new preset
+    const newPreset: OverclockPreset = {
+      name: this.presetName.trim(),
+      frequency: formValues.frequency,
+      coreVoltage: formValues.coreVoltage,
+      timestamp: Date.now(),
+      asicModel: this.ASICModel
+    };
+    
+    // Check if a preset with this name already exists
+    const existingIndex = this.presets.findIndex(p => p.name === newPreset.name);
+    if (existingIndex >= 0) {
+      // Replace existing preset
+      this.presets[existingIndex] = newPreset;
+    } else {
+      // Add new preset
+      this.presets.push(newPreset);
+    }
+    
+    // Sort by most recent
+    this.presets.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Save to localStorage
+    this.savePresetsToStorage();
+    
+    // Close dialog
+    this.showPresetDialog = false;
+    
+    this.toastr.success(`Preset "${this.presetName}" saved successfully`, 'Success');
+  }
+  
+  /**
+   * Apply settings from a preset
+   */
+  applyPreset(preset: OverclockPreset): void {
+    // Update form with preset values
+    this.form.patchValue({
+      frequency: preset.frequency,
+      coreVoltage: preset.coreVoltage
+    });
+    
+    // Mark form as dirty to enable save button
+    this.form.markAsDirty();
+    
+    this.toastr.info(`Applied preset "${preset.name}"`, 'Preset Applied');
+  }
+  
+  /**
+   * Delete a preset
+   */
+  deletePreset(preset: OverclockPreset, event: Event): void {
+    // Stop the click event from propagating to parent (which would apply the preset)
+    event.stopPropagation();
+    
+    // Skip deletion for built-in presets
+    if (preset.builtIn) {
+      this.toastr.error(`Cannot delete built-in preset "${preset.name}"`, 'Error');
+      return;
+    }
+    
+    // Remove the preset
+    this.presets = this.presets.filter(p => p.name !== preset.name);
+    
+    // Save updated presets to localStorage
+    this.savePresetsToStorage();
+    
+    this.toastr.success(`Deleted preset "${preset.name}"`, 'Success');
+  }
+  
+  /**
+   * Close the preset dialog without saving
+   */
+  cancelSavePreset(): void {
+    this.showPresetDialog = false;
+  }
+
+  /**
+   * Acknowledge the warning message and save to localStorage
+   */
+  acknowledgeWarning(): void {
+    this.warningAcknowledged = true;
+    localStorage.setItem(this.STORAGE_KEY_WARNING, 'true');
+  }
 }

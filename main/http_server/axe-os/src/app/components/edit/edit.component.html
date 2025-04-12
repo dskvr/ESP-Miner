@@ -1,9 +1,16 @@
 <ng-container *ngIf="form != null">
     <form [formGroup]="form">
 
-        <p-message *ngIf="settingsUnlocked" severity="warn" styleClass="w-full mb-3 py-4 border-round-xl"
-            text="Custom settings can cause damage & system instability. Only modify these settings if you understand the risks of running outside designed parameters.">
-        </p-message>
+        <ng-container *ngIf="settingsUnlocked && !warningAcknowledged">
+            <div class="custom-warning-message mb-3">
+                <div class="warning-icon">
+                    <i class="pi pi-exclamation-triangle"></i>
+                </div>
+                <div class="warning-content">
+                    <div class="warning-text">Custom settings can cause damage & system instability. Only modify these settings if you understand the risks of running outside designed parameters.</div>
+                </div>
+            </div>
+        </ng-container>
 
         <ng-container *ngIf="!settingsUnlocked && restrictedModels.includes(ASICModel)">
             <div class="field grid p-fluid">
@@ -22,21 +29,112 @@
         </ng-container>
 
         <ng-container *ngIf="settingsUnlocked === true">
+            <!-- Wrapper with relative positioning for overlay -->
+            <div class="settings-wrapper">
+                <!-- Overlay that blocks interaction until warning is acknowledged -->
+                <div *ngIf="!warningAcknowledged" class="settings-overlay">
+                    <div class="overlay-content">
+                        <i class="pi pi-exclamation-triangle warning-icon"></i>
+                        <h3>Warning</h3>
+                        <p>Please acknowledge the warning message above before proceeding.</p>
+                        <button pButton type="button" 
+                                label="I understand the risks" 
+                                class="p-button-warning"
+                                (click)="acknowledgeWarning()"></button>
+                    </div>
+                </div>
 
-            <div class="field grid p-fluid">
-                <label htmlFor="frequency" class="col-12 mb-2 md:col-2 md:mb-0">Frequency</label>
-                <div class="col-12 md:col-10">
-                    <input pInputText id="frequency" formControlName="frequency" type="number" />
+                <!-- Presets Section -->
+                <div class="field grid p-fluid mb-4">
+                    <label class="col-12 mb-2 md:col-2 md:mb-0">Presets</label>
+                    <div class="col-12 md:col-10">
+                        <div class="preset-container">
+                            <div class="preset-actions">
+                                <button pButton type="button" icon="pi pi-save" label="Save Current Settings"
+                                        class="p-button-sm p-button-outlined" (click)="openSavePresetDialog()"></button>
+                            </div>
+                            <div class="preset-list" *ngIf="presets.length > 0">
+                                <div *ngFor="let preset of presets" class="preset-item" [ngClass]="{'built-in': preset.builtIn}" (click)="applyPreset(preset)">
+                                    <div class="preset-details">
+                                        <h4 class="preset-name">
+                                            {{preset.name}}
+                                            <span *ngIf="preset.builtIn" class="built-in-badge">Built-in</span>
+                                        </h4>
+                                        <div class="preset-values">
+                                            <span>F: {{preset.frequency}}MHz</span>
+                                            <span>V: {{preset.coreVoltage}}mV</span>
+                                        </div>
+                                    </div>
+                                    <button pButton type="button" icon="pi pi-trash" 
+                                            class="p-button-sm p-button-secondary delete-button"
+                                            (click)="deletePreset(preset, $event)"
+                                            [disabled]="preset.builtIn" 
+                                            [pTooltip]="preset.builtIn ? 'Built-in presets cannot be deleted' : 'Delete preset'"></button>
+                                </div>
+                            </div>
+                            <div *ngIf="presets.length === 0" class="preset-empty">
+                                <p>No saved presets. Save your current settings as a preset.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field grid p-fluid">
+                    <label htmlFor="frequency" class="col-12 mb-2 md:col-2 md:mb-0">Frequency</label>
+                    <div class="col-12 md:col-10">
+                        <div class="value-control-container">
+                            <div class="increment-buttons-container">
+                                <ng-container *ngFor="let inc of reversedIncrementOptions">
+                                    <button pButton type="button" size="small" class="p-button-sm decrement-button"
+                                        (click)="incrementValue('frequency', -inc)">-{{inc}}</button>
+                                </ng-container>
+                            </div>
+                            <input pInputText id="frequency" formControlName="frequency" type="number" 
+                                    [style.color]="getFrequencyColor()" class="value-input"
+                                    [min]="minFrequency[ASICModel]" [max]="maxFrequency[ASICModel]" />
+                            <div class="increment-buttons-container">
+                                <ng-container *ngFor="let inc of incrementOptions">
+                                    <button pButton type="button" size="small" class="p-button-sm increment-button"
+                                        (click)="incrementValue('frequency', inc)">+{{inc}}</button>
+                                </ng-container>
+                            </div>
+                        </div>
+                        <div class="range-info">
+                            <span>Min: {{minFrequency[ASICModel]}}</span>
+                            <span style="color: #22c55e;">Default: {{defaultFrequency[ASICModel]}}</span>
+                            <span>Max: {{maxFrequency[ASICModel]}}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field grid p-fluid">
+                    <label htmlFor="coreVoltage" class="col-12 mb-2 md:col-2 md:mb-0">Core Voltage</label>
+                    <div class="col-12 md:col-10">
+                        <div class="value-control-container">
+                            <div class="increment-buttons-container">
+                                <ng-container *ngFor="let inc of reversedIncrementOptions">
+                                    <button pButton type="button" size="small" class="p-button-sm decrement-button"
+                                        (click)="incrementValue('coreVoltage', -inc)">-{{inc}}</button>
+                                </ng-container>
+                            </div>
+                            <input pInputText id="coreVoltage" formControlName="coreVoltage" type="number" 
+                                    [style.color]="getVoltageColor()" class="value-input"
+                                    [min]="minVoltage[ASICModel]" [max]="maxVoltage[ASICModel]" />
+                            <div class="increment-buttons-container">
+                                <ng-container *ngFor="let inc of incrementOptions">
+                                    <button pButton type="button" size="small" class="p-button-sm increment-button"
+                                        (click)="incrementValue('coreVoltage', inc)">+{{inc}}</button>
+                                </ng-container>
+                            </div>
+                        </div>
+                        <div class="range-info">
+                            <span>Min: {{minVoltage[ASICModel]}}</span>
+                            <span style="color: #22c55e;">Default: {{defaultVoltage[ASICModel]}}</span>
+                            <span>Max: {{maxVoltage[ASICModel]}}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <div class="field grid p-fluid">
-                <label htmlFor="coreVoltage" class="col-12 mb-2 md:col-2 md:mb-0">Core Voltage</label>
-                <div class="col-12 md:col-10">
-                    <input pInputText id="coreVoltage" formControlName="coreVoltage" type="number" />
-                </div>
-            </div>
-
         </ng-container>
 
         <div class="col-12" *ngIf="form.get('overheat_mode')?.value === 1">
@@ -101,3 +199,25 @@
 
     </form>
 </ng-container>
+
+<!-- Save Preset Dialog -->
+<p-dialog header="Save Preset" [(visible)]="showPresetDialog" [style]="{width: '450px'}" [modal]="true">
+    <div class="field">
+        <label for="presetName">Preset Name</label>
+        <input type="text" pInputText id="presetName" [(ngModel)]="presetName" style="width: 100%" />
+    </div>
+    <div class="current-settings-preview">
+        <div class="preview-item">
+            <label>Frequency:</label>
+            <span>{{ form?.get('frequency')?.value || 0 }} MHz</span>
+        </div>
+        <div class="preview-item">
+            <label>Core Voltage:</label>
+            <span>{{ form?.get('coreVoltage')?.value || 0 }} mV</span>
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <button pButton pRipple label="Cancel" icon="pi pi-times" class="p-button-text" (click)="cancelSavePreset()"></button>
+        <button pButton pRipple label="Save" icon="pi pi-save" class="p-button-text" (click)="savePreset()"></button>
+    </ng-template>
+</p-dialog>
