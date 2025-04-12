@@ -2,16 +2,6 @@
     <form [formGroup]="form">
 
         <h3>Overclocking</h3>
-        <ng-container *ngIf="settingsUnlocked && !warningAcknowledged">
-            <div class="custom-warning-message mb-3">
-                <div class="warning-icon">
-                    <i class="pi pi-exclamation-triangle"></i>
-                </div>
-                <div class="warning-content">
-                    <div class="warning-text">Custom settings can cause damage & system instability. Only modify these settings if you understand the risks of running outside designed parameters.</div>
-                </div>
-            </div>
-        </ng-container>
 
         <ng-container *ngIf="!settingsUnlocked && restrictedModels.includes(ASICModel)">
             <div class="field grid p-fluid">
@@ -37,7 +27,7 @@
                     <div class="overlay-content">
                         <i class="pi pi-exclamation-triangle warning-icon"></i>
                         <h3>Warning</h3>
-                        <p>Please acknowledge the warning message above before proceeding.</p>
+                        <p>Custom settings can cause damage & system instability. Only modify these settings if you understand the risks of running outside designed parameters.</p>
                         <button pButton type="button" 
                                 label="I understand the risks" 
                                 class="p-button-warning"
@@ -58,8 +48,8 @@
                                     <div class="preset-details">
                                         <h4 class="preset-name">
                                             {{preset.name}}
-                                            <span *ngIf="preset.builtIn" class="built-in-badge">Built-in</span>
-                                            <span *ngIf="presetMatchesCurrentValues(preset)" class="selected-badge">Selected</span>
+                                            <span *ngIf="preset.builtIn" class="p-badge built-in-badge">Built-in</span>
+                                            <span *ngIf="presetMatchesCurrentValues(preset)" class="p-badge selected-badge">Selected</span>
                                         </h4>
                                         <div class="preset-values">
                                             <span>F: {{preset.frequency}}MHz</span>
@@ -149,8 +139,8 @@
                     <label htmlFor="coreVoltage" class="col-12 mb-2 md:col-2 md:mb-0"></label>
                     <div class="col-12 md:col-10">
                         <div class="preset-actions">
-                            <button pButton type="button" icon="pi pi-save" label="Save Settings As Preset"
-                                class="p-button-sm p-button-success save-preset-button" (click)="openSavePresetDialog()"></button>
+                            <button pButton pRipple label="Save Settings As Preset" icon="pi pi-save" class="p-button" 
+                                (click)="openSavePresetDialog()" [disabled]="hasMatchingPreset"></button>
                         </div>
                     </div>
                 </div>
@@ -175,7 +165,7 @@
                 <label for="invertfanpolarity">Invert Fan Duty Cycle <i class="pi pi-info-circle" style="font-size: 0.8rem; margin-left: 0.2rem;" pTooltip="Inverting the polarity of the fan PWM signal"></i></label>
             </div>
         </div>
-        
+
         <div class="col-12">
             <div class="field-checkbox">
                 <p-checkbox name="autofanspeed" formControlName="autofanspeed" inputId="autofanspeed"
@@ -245,10 +235,7 @@
             <label>Core Voltage:</label>
             <span>{{ form?.get('coreVoltage')?.value || 0 }} mV</span>
         </div>
-        <div *ngIf="hasMatchingPreset" class="duplicate-warning">
-            <i class="pi pi-exclamation-triangle"></i>
-            <span>These settings match an existing preset: <strong>{{ selectedPreset?.name }}</strong></span>
-        </div>
+
     </div>
     <ng-template pTemplate="footer">
         <button pButton pRipple label="Cancel" icon="pi pi-times" class="p-button" (click)="cancelSavePreset()"></button>
@@ -260,3 +247,7 @@
                 (click)="savePreset()"></button>
     </ng-template>
 </p-dialog>
+
+<style>
+
+</style>
