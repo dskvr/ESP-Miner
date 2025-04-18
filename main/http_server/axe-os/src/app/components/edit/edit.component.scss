@@ -267,7 +267,7 @@
 .value-input {
     font-weight: bold;
     text-align: center;
-    font-size: 1.25rem;
+    font-size: 2rem;
     transition: color 0.3s ease;
     border: 1px solid #374151;
     background-color: rgba(17, 24, 39, 0.8);
@@ -292,13 +292,6 @@
 .info-tooltip {
   margin-left: 5px;
   cursor: help;
-}
-
-/* Container for input and indicator */
-.input-with-indicator {
-  display: flex;
-  align-items: center;
-  flex: 1;
 }
 
 /* Style for the frequency wrapper to display properly */

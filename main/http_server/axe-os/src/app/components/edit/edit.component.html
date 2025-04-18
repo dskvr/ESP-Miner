@@ -36,6 +36,9 @@
                 </div>
 
                 <!-- Presets Section -->
+
+                
+
                 <div class="field grid p-fluid mb-4">
                     <label class="col-12 mb-2 md:col-2 md:mb-0">Presets</label>
                     <div class="col-12 md:col-10">
@@ -48,8 +51,8 @@
                                     <div class="preset-details">
                                         <h4 class="preset-name">
                                             {{preset.name}}
-                                            <span *ngIf="preset.builtIn" class="p-badge built-in-badge">Built-in</span>
-                                            <span *ngIf="presetMatchesCurrentValues(preset)" class="p-badge selected-badge">Selected</span>
+                                            <span *ngIf="preset.builtIn" class="p-badge built-in-badge ml-2">Built-in</span>
+                                            <span *ngIf="presetMatchesCurrentValues(preset)" class="p-badge selected-badge ml-2">Selected</span>
                                         </h4>
                                         <div class="preset-values">
                                             <span>F: {{preset.frequency}}MHz</span>
@@ -79,7 +82,7 @@
                     </div>
                 </div>
 
-                <div class="grid">
+                <div class="field grid p-fluid my-4">
                     <div class="col-12 md:col-2">
                         <label for="frequency">Frequency</label>
                     </div>
@@ -94,18 +97,18 @@
                                 </ng-container>
                             </div>
                             
-                            <div class="input-with-indicator">
-                                <input 
-                                    pInputText 
-                                    id="frequency" 
-                                    class="value-input"
-                                    formControlName="frequency" 
-                                    type="number" 
-                                    [style.color]="getFrequencyColor()" 
-                                    [min]="minFrequency[ASICModel]" 
-                                    [max]="maxFrequency[ASICModel]"
-                                />   
-                            </div>
+                            <input 
+                                pInputText 
+                                id="frequency" 
+                                class="value-input"
+                                formControlName="frequency" 
+                                type="number" 
+                                [style.color]="getFrequencyColor()" 
+                                [min]="minFrequency[ASICModel]" 
+                                [max]="maxFrequency[ASICModel]"
+                                (keydown.ArrowUp)="incrementValue('frequency', 1); $event.preventDefault()"
+                                (keydown.ArrowDown)="incrementValue('frequency', -1); $event.preventDefault()"
+                            /> 
                             
                             <div class="increment-buttons-container">
                                 <ng-container *ngFor="let inc of incrementOptions">
@@ -129,16 +132,16 @@
                                         Actual: {{ actualFrequency }} MHz
                                     </span> 
                                 </span>
-                                <span>
+                                <!-- <span>
                                     Default: {{defaultFrequency[ASICModel]}}    
-                                </span>
+                                </span> -->
                             </span>
                             <span>Max: {{maxFrequency[ASICModel]}}</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="field grid p-fluid">
+                <div class="field grid p-fluid my-4">
                     <label htmlFor="coreVoltage" class="col-12 mb-2 md:col-2 md:mb-0">Core Voltage</label>
                     <div class="col-12 md:col-10">
                         <div class="value-control-container">
@@ -150,9 +153,17 @@
                                     </button>
                                 </ng-container>
                             </div>
-                            <input pInputText id="coreVoltage" formControlName="coreVoltage" type="number" 
-                                    [style.color]="getVoltageColor()" class="value-input"
-                                    [min]="minVoltage[ASICModel]" [max]="maxVoltage[ASICModel]" />
+                            <input 
+                                pInputText id="coreVoltage" 
+                                class="value-input"    
+                                formControlName="coreVoltage" 
+                                type="number" 
+                                [style.color]="getVoltageColor()" 
+                                [min]="minVoltage[ASICModel]" 
+                                [max]="maxVoltage[ASICModel]" 
+                                (keydown.ArrowUp)="incrementValue('coreVoltage', 1); $event.preventDefault()"
+                                (keydown.ArrowDown)="incrementValue('coreVoltage', -1); $event.preventDefault()"
+                                />
                             <div class="increment-buttons-container">
                                 <ng-container *ngFor="let inc of incrementOptions">
                                     <button pButton type="button" size="small" class="p-button-sm increment-button"
@@ -164,7 +175,7 @@
                         </div>
                         <div class="range-info">
                             <span>Min: {{minVoltage[ASICModel]}}</span>
-                            <span>Default: {{defaultVoltage[ASICModel]}}</span>
+                            <!-- <span>Default: {{defaultVoltage[ASICModel]}}</span> -->
                             <span>Max: {{maxVoltage[ASICModel]}}</span>
                         </div>
                     </div>
