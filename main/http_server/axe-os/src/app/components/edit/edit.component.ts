@@ -340,14 +340,24 @@ export class EditComponent implements OnInit, OnDestroy {
   generateValidFrequencies(): void {
     const min = this.minFrequency[this.ASICModel];
     const max = this.maxFrequency[this.ASICModel];
-    const step = 1; // 1MHz increments for calculation
+    
+    // Use finer granularity for all chips to catch more valid frequencies
+    const step = 0.5; // 0.5MHz increments for more precise calculation
     
     const frequencies: number[] = [];
+    
+    // Use the same approach for all chip models
     for (let freq = min; freq <= max; freq += step) {
       const actualFreq = this.calculateActualFrequency(freq);
-      // Only add if it's a unique value
-      if (!frequencies.includes(actualFreq)) {
-        frequencies.push(actualFreq);
+      
+      // Only add frequencies where the calculated value matches the input value
+      // This ensures we only have frequencies that won't show an indicator
+      const epsilon = 0.01; // Small tolerance for floating point comparison
+      if (Math.abs(actualFreq - freq) < epsilon) {
+        // Only add if it's a unique value
+        if (!frequencies.includes(actualFreq)) {
+          frequencies.push(actualFreq);
+        }
       }
     }
     
@@ -567,145 +577,7 @@ export class EditComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Find the next valid frequency in the sequence
-   */
-  findNextValidFrequency(current: number, increment: boolean): number {
-    const validFreqs = this.validFrequencies[this.ASICModel];
-    if (!validFreqs || validFreqs.length === 0) {
-      // If no valid frequencies calculated, fall back to the original behavior
-      return increment ? current + 1 : current - 1;
-    }
-    
-    // Find the nearest valid frequency that's greater/less than current
-    if (increment) {
-      const next = validFreqs.find(freq => freq > current);
-      return next !== undefined ? next : current;
-    } else {
-      // Find largest frequency less than current
-      const prev = [...validFreqs].reverse().find(freq => freq < current);
-      return prev !== undefined ? prev : current;
-    }
-  }
-
-  public updateSystem() {
-
-    const form = this.form.getRawValue();
-
-    if (form.stratumPassword === '*****') {
-      delete form.stratumPassword;
-    }
-
-    this.systemService.updateSystem(this.uri, form)
-      .pipe(this.loadingService.lockUIUntilComplete())
-      .subscribe({
-        next: () => {
-          const successMessage = this.uri ? `Saved settings for ${this.uri}` : 'Saved settings';
-          this.toastr.success(successMessage, 'Success!');
-          this.savedChanges = true;
-        },
-        error: (err: HttpErrorResponse) => {
-          const errorMessage = this.uri ? `Could not save settings for ${this.uri}. ${err.message}` : `Could not save settings. ${err.message}`;
-          this.toastr.error(errorMessage, 'Error');
-          this.savedChanges = false;
-        }
-      });
-  }
-
-  showWifiPassword: boolean = false;
-  toggleWifiPasswordVisibility() {
-    this.showWifiPassword = !this.showWifiPassword;
-  }
-
-  disableOverheatMode() {
-    this.form.patchValue({ overheat_mode: 0 });
-    this.updateSystem();
-  }
-
-  toggleOverclockMode(enable: boolean) {
-    this.settingsUnlocked = enable;
-    this.saveOverclockSetting(enable ? 1 : 0);
-
-    if (enable) {
-      console.log(
-        '🎉 Overclock mode enabled!\n' +
-        '⚡ Custom frequency and voltage values are now available.'
-      );
-    } else {
-      console.log('🔒 Overclock mode disabled. Using safe preset values only.');
-    }
-  }
-
-  public restart() {
-    this.systemService.restart(this.uri)
-      .pipe(this.loadingService.lockUIUntilComplete())
-      .subscribe({
-        next: () => {
-          const successMessage = this.uri ? `Bitaxe at ${this.uri} restarted` : 'Bitaxe restarted';
-          this.toastr.success(successMessage, 'Success');
-        },
-        error: (err: HttpErrorResponse) => {
-          const errorMessage = this.uri ? `Failed to restart device at ${this.uri}. ${err.message}` : `Failed to restart device. ${err.message}`;
-          this.toastr.error(errorMessage, 'Error');
-        }
-      });
-  }
-
-  getDropdownFrequency() {
-    // Get base frequency options based on ASIC model
-    let options = [];
-    switch(this.ASICModel) {
-        case this.eASICModel.BM1366: options = [...this.BM1366DropdownFrequency]; break;
-        case this.eASICModel.BM1368: options = [...this.BM1368DropdownFrequency]; break;
-        case this.eASICModel.BM1370: options = [...this.BM1370DropdownFrequency]; break;
-        case this.eASICModel.BM1397: options = [...this.BM1397DropdownFrequency]; break;
-        default: return [];
-    }
-
-    // Get current frequency value from form
-    const currentFreq = this.form?.get('frequency')?.value;
-
-    // If current frequency exists and isn't in the options
-    if (currentFreq && !options.some(opt => opt.value === currentFreq)) {
-        options.push({
-            name: `${currentFreq} (Custom)`,
-            value: currentFreq
-        });
-        // Sort options by frequency value
-        options.sort((a, b) => a.value - b.value);
-    }
-
-    return options;
-  }
-
-  getCoreVoltage() {
-    // Get base voltage options based on ASIC model
-    let options = [];
-    switch(this.ASICModel) {
-        case this.eASICModel.BM1366: options = [...this.BM1366CoreVoltage]; break;
-        case this.eASICModel.BM1368: options = [...this.BM1368CoreVoltage]; break;
-        case this.eASICModel.BM1370: options = [...this.BM1370CoreVoltage]; break;
-        case this.eASICModel.BM1397: options = [...this.BM1397CoreVoltage]; break;
-        default: return [];
-    }
-
-    // Get current voltage value from form
-    const currentVoltage = this.form?.get('coreVoltage')?.value;
-
-    // If current voltage exists and isn't in the options
-    if (currentVoltage && !options.some(opt => opt.value === currentVoltage)) {
-        options.push({
-            name: `${currentVoltage} (Custom)`,
-            value: currentVoltage
-        });
-        // Sort options by voltage value
-        options.sort((a, b) => a.value - b.value);
-    }
-
-    return options;
-  }
-
-  // Modified to use valid frequencies
+  // Modified to use the same approach for all chip models
   incrementValue(controlName: string, amount: number): void {
     const control = this.form.get(controlName);
     if (!control) return;
@@ -714,18 +586,32 @@ export class EditComponent implements OnInit, OnDestroy {
     let newValue;
     
     if (controlName === 'frequency') {
-      // For frequency, find the next valid frequency in the sequence
-      if (amount > 0) {
-        // If incrementing by more than 1, try to find a valid frequency about that much higher
+      // Use the same approach for all chip models
+      const validFreqs = this.validFrequencies[this.ASICModel];
+      
+      if (validFreqs && validFreqs.length > 0) {
+        // For large steps, try to find frequency closest to the target amount
         const targetValue = currentValue + amount;
-        newValue = this.validFrequencies[this.ASICModel].find(f => f >= targetValue) || 
-                  this.validFrequencies[this.ASICModel][this.validFrequencies[this.ASICModel].length - 1];
+        
+        if (amount > 0) {
+          // If incrementing, find the valid frequency that's closest to or above the target
+          // If nothing found, use the highest available
+          const candidateFreqs = validFreqs.filter(f => f >= targetValue);
+          newValue = candidateFreqs.length > 0 ? 
+                     candidateFreqs[0] : 
+                     validFreqs[validFreqs.length - 1];
+        } else {
+          // If decrementing, find the valid frequency that's closest to or below the target
+          // If nothing found, use the lowest available
+          const candidateFreqs = validFreqs.filter(f => f <= targetValue);
+          newValue = candidateFreqs.length > 0 ?
+                     candidateFreqs[candidateFreqs.length - 1] :
+                     validFreqs[0];
+        }
       } else {
-        // If decrementing, find a valid frequency about that much lower
-        const targetValue = currentValue + amount; // amount is negative
-        // Reverse search to find highest freq below target
-        newValue = [...this.validFrequencies[this.ASICModel]].reverse().find(f => f <= targetValue) ||
-                  this.validFrequencies[this.ASICModel][0];
+        // Fallback if valid frequencies aren't available
+        newValue = currentValue + amount;
+        newValue = Math.min(Math.max(newValue, this.minFrequency[this.ASICModel]), this.maxFrequency[this.ASICModel]);
       }
     } else {
       // For other controls (like voltage), use simple addition
@@ -737,8 +623,27 @@ export class EditComponent implements OnInit, OnDestroy {
       }
     }
     
-    control.setValue(newValue);
-    control.markAsDirty();
+    // Check if the value has actually changed
+    if (newValue !== currentValue) {
+      // Use form.patchValue instead of control.setValue to ensure change detection works
+      const patchObj: any = {};
+      patchObj[controlName] = newValue;
+      
+      // Update the form value
+      this.form.patchValue(patchObj);
+      
+      // Explicitly mark form as dirty using setTimeout to ensure it runs after Angular's change detection
+      setTimeout(() => {
+        // Mark the specific control as dirty
+        control.markAsDirty();
+        
+        // Also mark the whole form as dirty
+        this.form.markAsDirty();
+        
+        // Force change detection if needed
+        this.form.updateValueAndValidity();
+      });
+    }
   }
 
   // Color calculation methods
@@ -977,12 +882,35 @@ export class EditComponent implements OnInit, OnDestroy {
    * Apply settings from a preset
    */
   applyPreset(preset: OverclockPreset): void {
+    // Current values before applying preset
+    const currentFreq = this.form.get('frequency')?.value;
+    const currentVoltage = this.form.get('coreVoltage')?.value;
+    
+    // Update form with preset values
     this.form.patchValue({
       frequency: preset.frequency,
       coreVoltage: preset.coreVoltage
     });
     
-    this.form.markAsDirty();
+    // Check if values actually changed
+    if (currentFreq !== preset.frequency || currentVoltage !== preset.coreVoltage) {
+      // Explicitly mark form as dirty using setTimeout to ensure it runs after Angular's change detection
+      setTimeout(() => {
+        // Mark specific controls as dirty
+        if (currentFreq !== preset.frequency) {
+          this.form.get('frequency')?.markAsDirty();
+        }
+        if (currentVoltage !== preset.coreVoltage) {
+          this.form.get('coreVoltage')?.markAsDirty();
+        }
+        
+        // Also mark the whole form as dirty
+        this.form.markAsDirty();
+        
+        // Force change detection if needed
+        this.form.updateValueAndValidity();
+      });
+    }
     
     this.toastr.info(`Applied preset "${preset.name}"`, 'Preset Applied');
   }
@@ -1027,5 +955,143 @@ export class EditComponent implements OnInit, OnDestroy {
     const diff = Math.abs(inputFreq - actualFreq);
     
     return diff > epsilon;
+  }
+
+  /**
+   * Find the next valid frequency in the sequence
+   */
+  findNextValidFrequency(current: number, increment: boolean): number {
+    const validFreqs = this.validFrequencies[this.ASICModel];
+    if (!validFreqs || validFreqs.length === 0) {
+      // If no valid frequencies calculated, fall back to the original behavior
+      return increment ? current + 1 : current - 1;
+    }
+    
+    // Find the nearest valid frequency that's greater/less than current
+    if (increment) {
+      const next = validFreqs.find(freq => freq > current);
+      return next !== undefined ? next : current;
+    } else {
+      // Find largest frequency less than current
+      const prev = [...validFreqs].reverse().find(freq => freq < current);
+      return prev !== undefined ? prev : current;
+    }
+  }
+
+  public updateSystem() {
+
+    const form = this.form.getRawValue();
+
+    if (form.stratumPassword === '*****') {
+      delete form.stratumPassword;
+    }
+
+    this.systemService.updateSystem(this.uri, form)
+      .pipe(this.loadingService.lockUIUntilComplete())
+      .subscribe({
+        next: () => {
+          const successMessage = this.uri ? `Saved settings for ${this.uri}` : 'Saved settings';
+          this.toastr.success(successMessage, 'Success!');
+          this.savedChanges = true;
+        },
+        error: (err: HttpErrorResponse) => {
+          const errorMessage = this.uri ? `Could not save settings for ${this.uri}. ${err.message}` : `Could not save settings. ${err.message}`;
+          this.toastr.error(errorMessage, 'Error');
+          this.savedChanges = false;
+        }
+      });
+  }
+
+  showWifiPassword: boolean = false;
+  toggleWifiPasswordVisibility() {
+    this.showWifiPassword = !this.showWifiPassword;
+  }
+
+  disableOverheatMode() {
+    this.form.patchValue({ overheat_mode: 0 });
+    this.updateSystem();
+  }
+
+  toggleOverclockMode(enable: boolean) {
+    this.settingsUnlocked = enable;
+    this.saveOverclockSetting(enable ? 1 : 0);
+
+    if (enable) {
+      console.log(
+        '🎉 Overclock mode enabled!\n' +
+        '⚡ Custom frequency and voltage values are now available.'
+      );
+    } else {
+      console.log('🔒 Overclock mode disabled. Using safe preset values only.');
+    }
+  }
+
+  public restart() {
+    this.systemService.restart(this.uri)
+      .pipe(this.loadingService.lockUIUntilComplete())
+      .subscribe({
+        next: () => {
+          const successMessage = this.uri ? `Bitaxe at ${this.uri} restarted` : 'Bitaxe restarted';
+          this.toastr.success(successMessage, 'Success');
+        },
+        error: (err: HttpErrorResponse) => {
+          const errorMessage = this.uri ? `Failed to restart device at ${this.uri}. ${err.message}` : `Failed to restart device. ${err.message}`;
+          this.toastr.error(errorMessage, 'Error');
+        }
+      });
+  }
+
+  getDropdownFrequency() {
+    // Get base frequency options based on ASIC model
+    let options = [];
+    switch(this.ASICModel) {
+        case this.eASICModel.BM1366: options = [...this.BM1366DropdownFrequency]; break;
+        case this.eASICModel.BM1368: options = [...this.BM1368DropdownFrequency]; break;
+        case this.eASICModel.BM1370: options = [...this.BM1370DropdownFrequency]; break;
+        case this.eASICModel.BM1397: options = [...this.BM1397DropdownFrequency]; break;
+        default: return [];
+    }
+
+    // Get current frequency value from form
+    const currentFreq = this.form?.get('frequency')?.value;
+
+    // If current frequency exists and isn't in the options
+    if (currentFreq && !options.some(opt => opt.value === currentFreq)) {
+        options.push({
+            name: `${currentFreq} (Custom)`,
+            value: currentFreq
+        });
+        // Sort options by frequency value
+        options.sort((a, b) => a.value - b.value);
+    }
+
+    return options;
+  }
+
+  getCoreVoltage() {
+    // Get base voltage options based on ASIC model
+    let options = [];
+    switch(this.ASICModel) {
+        case this.eASICModel.BM1366: options = [...this.BM1366CoreVoltage]; break;
+        case this.eASICModel.BM1368: options = [...this.BM1368CoreVoltage]; break;
+        case this.eASICModel.BM1370: options = [...this.BM1370CoreVoltage]; break;
+        case this.eASICModel.BM1397: options = [...this.BM1397CoreVoltage]; break;
+        default: return [];
+    }
+
+    // Get current voltage value from form
+    const currentVoltage = this.form?.get('coreVoltage')?.value;
+
+    // If current voltage exists and isn't in the options
+    if (currentVoltage && !options.some(opt => opt.value === currentVoltage)) {
+        options.push({
+            name: `${currentVoltage} (Custom)`,
+            value: currentVoltage
+        });
+        // Sort options by voltage value
+        options.sort((a, b) => a.value - b.value);
+    }
+
+    return options;
   }
 }
