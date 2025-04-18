@@ -386,7 +386,7 @@ export class EditComponent implements OnInit, OnDestroy {
     let postDivider1 = 0, postDivider2 = 0;
     let refDivider = 0;
     let minDifference = 10;
-    const maxDiff = 1.0;
+    const maxDiff = 0.1;
     let newFreq = 50.0;
 
     for (let refDivLoop = 2; refDivLoop > 0 && fbDivider === 0; refDivLoop--) {
@@ -601,6 +601,8 @@ export class EditComponent implements OnInit, OnDestroy {
 
   /** Move by a delta in MHz (used for +10 / +25 / +50 / +100 buttons) */
   private stepByDelta(current: number, deltaMHz: number): number {
+    console.log('stepByDelta', current, deltaMHz);
+
     const ramp = this.sortedFreqs;
     if (!ramp.length || deltaMHz === 0) return current;
 
@@ -631,7 +633,9 @@ export class EditComponent implements OnInit, OnDestroy {
       break;
     }
 
-    return bestIdx >= 0 ? ramp[bestIdx] : current;
+    const value = bestIdx >= 0 ? ramp[bestIdx] : current;
+    const actual = this.calculateActualFrequency(value);
+    return actual && current !== actual? actual: value;
   }
 
 
