@@ -22,6 +22,7 @@ interface OverclockPreset {
   templateUrl: './edit.component.html',
   styleUrls: ['./edit.component.scss']
 })
+
 export class EditComponent implements OnInit, OnDestroy {
 
 
@@ -293,7 +294,7 @@ export class EditComponent implements OnInit, OnDestroy {
           flipscreen: [info.flipscreen == 1],
           invertscreen: [info.invertscreen == 1],
           coreVoltage: [info.coreVoltage, [Validators.required, Validators.min(this.minVoltage[this.ASICModel]), Validators.max(this.maxVoltage[this.ASICModel])]],
-          frequency: [info.frequency, [Validators.required, Validators.min(this.minFrequency[this.ASICModel]), Validators.max(this.maxFrequency[this.ASICModel])]],
+          frequency: [this.closestFrequency(info.frequency), [Validators.required, Validators.min(this.minFrequency[this.ASICModel]), Validators.max(this.maxFrequency[this.ASICModel])]],
           autofanspeed: [info.autofanspeed == 1, [Validators.required]],
           fanspeed: [info.fanspeed, [Validators.required]],
           temptarget: [info.temptarget, [Validators.required]],
@@ -385,7 +386,7 @@ export class EditComponent implements OnInit, OnDestroy {
     let postDivider1 = 0, postDivider2 = 0;
     let refDivider = 0;
     let minDifference = 10;
-    const maxDiff = 0.1;
+    const maxDiff = 1.0;
     let newFreq = 50.0;
 
     for (let refDivLoop = 2; refDivLoop > 0 && fbDivider === 0; refDivLoop--) {
@@ -579,6 +580,31 @@ export class EditComponent implements OnInit, OnDestroy {
       arr[mid] < value ? (lo = mid + 1) : (hi = mid);
     }
     return lo;
+  }
+
+  private closestFrequency(current: number, deltaMHz: number = 1): number {
+    const ramp = this.sortedFreqs;
+    if (!ramp.length || deltaMHz === 0) return current;
+
+    const target = current + deltaMHz;
+    const dir    = Math.sign(deltaMHz);
+
+    let hi = this.lowerBound(ramp, target);
+    let lo = hi - 1;
+
+    let idx: number;
+    if (lo < 0) {
+      idx = hi;
+    } else if (hi >= ramp.length) {
+      idx = lo;
+    } else {
+      idx = Math.abs(ramp[lo] - target) <= Math.abs(ramp[hi] - target) ? lo : hi;
+    }
+
+    if (dir > 0 && ramp[idx] <= current && idx + 1 < ramp.length) idx++;
+    if (dir < 0 && ramp[idx] >= current && idx - 1 >= 0) idx--;
+
+    return ramp[idx] ?? current;
   }
 
   /** Walk one slot up or down the ramp (for the “±” buttons). */

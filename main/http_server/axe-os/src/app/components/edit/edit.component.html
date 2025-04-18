@@ -95,11 +95,16 @@
                             </div>
                             
                             <div class="input-with-indicator">
-                                <input pInputText id="frequency" formControlName="frequency" type="number" 
-                                    [style.color]="getFrequencyColor()" class="value-input"
-                                    [min]="minFrequency[ASICModel]" [max]="maxFrequency[ASICModel]" />
-                                <!-- Add indicator for actual frequency that will be applied -->
-                                
+                                <input 
+                                    pInputText 
+                                    id="frequency" 
+                                    class="value-input"
+                                    formControlName="frequency" 
+                                    type="number" 
+                                    [style.color]="getFrequencyColor()" 
+                                    [min]="minFrequency[ASICModel]" 
+                                    [max]="maxFrequency[ASICModel]"
+                                />   
                             </div>
                             
                             <div class="increment-buttons-container">
@@ -205,11 +210,11 @@
         </div>
 
         <div *ngIf="form.controls['autofanspeed'].value == true">
-          <div class="col-12" *ngIf="form.controls['autofanspeed'].value == true">
+          <div class="col-12">
               <label>Target Temperature {{form.controls['temptarget'].value}}°C</label>
               <p-slider [min]="35" [max]="66" formControlName="temptarget"></p-slider>
           </div>
-      </div>
+        </div>
 
         <div *ngIf="form.controls['autofanspeed'].value != true">
             <div class="col-12" *ngIf="form.controls['autofanspeed'].value != true">
