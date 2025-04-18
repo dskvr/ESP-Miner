@@ -88,7 +88,9 @@
                             <div class="increment-buttons-container">
                                 <ng-container *ngFor="let inc of reversedIncrementOptions">
                                     <button pButton type="button" size="small" class="p-button-sm decrement-button"
-                                        (click)="incrementValue('frequency', -inc)">-{{inc}}</button>
+                                        (click)="incrementValue('frequency', -inc)">
+                                        {{inc === 1 ? '-' : '-' + inc}}
+                                    </button>
                                 </ng-container>
                             </div>
                             
@@ -103,7 +105,9 @@
                             <div class="increment-buttons-container">
                                 <ng-container *ngFor="let inc of incrementOptions">
                                     <button pButton type="button" size="small" class="p-button-sm increment-button"
-                                        (click)="incrementValue('frequency', inc)">+{{inc}}</button>
+                                        (click)="incrementValue('frequency', inc)">
+                                        {{inc === 1 ? '+' : '+' + inc}}
+                                    </button>
                                 </ng-container>
                             </div>
                         </div>
@@ -136,7 +140,9 @@
                             <div class="increment-buttons-container">
                                 <ng-container *ngFor="let inc of reversedIncrementOptions">
                                     <button pButton type="button" size="small" class="p-button-sm decrement-button"
-                                        (click)="incrementValue('coreVoltage', -inc)">-{{inc}}</button>
+                                        (click)="incrementValue('coreVoltage', -inc)">
+                                        {{inc === 1 ? '-' : '-' + inc}}
+                                    </button>
                                 </ng-container>
                             </div>
                             <input pInputText id="coreVoltage" formControlName="coreVoltage" type="number" 
@@ -145,7 +151,9 @@
                             <div class="increment-buttons-container">
                                 <ng-container *ngFor="let inc of incrementOptions">
                                     <button pButton type="button" size="small" class="p-button-sm increment-button"
-                                        (click)="incrementValue('coreVoltage', inc)">+{{inc}}</button>
+                                        (click)="incrementValue('coreVoltage', inc)">
+                                        {{inc === 1 ? '+' : '+' + inc}}
+                                    </button>
                                 </ng-container>
                             </div>
                         </div>
@@ -180,13 +188,13 @@
         </div>
 
         <h3>Cooling</h3>
-        <div class="col-12">
+        <!-- <div class="col-12">
             <div class="field-checkbox">
                 <p-checkbox name="invertfanpolarity" formControlName="invertfanpolarity" inputId="invertfanpolarity"
                     [binary]="true"></p-checkbox>
                 <label for="invertfanpolarity">Invert Fan Duty Cycle <i class="pi pi-info-circle" style="font-size: 0.8rem; margin-left: 0.2rem;" pTooltip="Inverting the polarity of the fan PWM signal"></i></label>
             </div>
-        </div>
+        </div> -->
 
         <div class="col-12">
             <div class="field-checkbox">

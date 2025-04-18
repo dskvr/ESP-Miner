@@ -41,7 +41,7 @@ describe('EditComponent', () => {
       flipscreen: 0,
       invertscreen: 0,
       autofanspeed: 1,
-      invertfanpolarity: 0,
+      // invertfanpolarity: 0,
       fanspeed: 70,
       overheat_mode: 0
     }));
