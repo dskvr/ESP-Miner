@@ -294,7 +294,7 @@ export class EditComponent implements OnInit, OnDestroy {
           flipscreen: [info.flipscreen == 1],
           invertscreen: [info.invertscreen == 1],
           coreVoltage: [info.coreVoltage, [Validators.required, Validators.min(this.minVoltage[this.ASICModel]), Validators.max(this.maxVoltage[this.ASICModel])]],
-          frequency: [this.closestFrequency(info.frequency), [Validators.required, Validators.min(this.minFrequency[this.ASICModel]), Validators.max(this.maxFrequency[this.ASICModel])]],
+          frequency: [this.deriveFloat(info.frequency), [Validators.required, Validators.min(this.minFrequency[this.ASICModel]), Validators.max(this.maxFrequency[this.ASICModel])]],
           autofanspeed: [info.autofanspeed == 1, [Validators.required]],
           fanspeed: [info.fanspeed, [Validators.required]],
           temptarget: [info.temptarget, [Validators.required]],
@@ -386,7 +386,7 @@ export class EditComponent implements OnInit, OnDestroy {
     let postDivider1 = 0, postDivider2 = 0;
     let refDivider = 0;
     let minDifference = 10;
-    const maxDiff = 1.0;
+    const maxDiff = 0.01;
     let newFreq = 50.0;
 
     for (let refDivLoop = 2; refDivLoop > 0 && fbDivider === 0; refDivLoop--) {
@@ -414,9 +414,7 @@ export class EditComponent implements OnInit, OnDestroy {
     }
 
     if (fbDivider === 0) {
-      console.warn(
-        `PLL cannot synthesise ${targetFreq.toFixed(2)} MHz (≥1 MHz off everywhere)`
-      );
+      // console.warn( `PLL cannot synthesise ${targetFreq.toFixed(2)} MHz (≥1 MHz off everywhere)` );
       return null; 
     }
 
@@ -458,7 +456,7 @@ export class EditComponent implements OnInit, OnDestroy {
     }
 
     if (fbDivider === 0) {
-      console.warn(`PLL cannot synthesise ${targetFreq.toFixed(2)} MHz on BM1366`);
+      // console.warn(`PLL cannot synthesise ${targetFreq.toFixed(2)} MHz on BM1366`);
       return null;
     }
     return +newFreq.toFixed(3);
@@ -502,7 +500,7 @@ export class EditComponent implements OnInit, OnDestroy {
     }
 
     if (!found) {
-      console.warn(`PLL cannot synthesise ${targetFreq.toFixed(2)} MHz on BM1368`);
+      // console.warn(`PLL cannot synthesise ${targetFreq.toFixed(2)} MHz on BM1368`);
       return null;
     }
     return +bestFreq.toFixed(3);
@@ -582,32 +580,57 @@ export class EditComponent implements OnInit, OnDestroy {
     return lo;
   }
 
-  private closestFrequency(current: number, deltaMHz: number = 1): number {
+  private deriveFloat(current: number): number {
     const ramp = this.sortedFreqs;
-    if (!ramp.length || deltaMHz === 0) return current;
-
-    const target = current + deltaMHz;
-    const dir    = Math.sign(deltaMHz);
-
-    let hi = this.lowerBound(ramp, target);
-    let lo = hi - 1;
-
-    let idx: number;
-    if (lo < 0) {
-      idx = hi;
-    } else if (hi >= ramp.length) {
-      idx = lo;
-    } else {
-      idx = Math.abs(ramp[lo] - target) <= Math.abs(ramp[hi] - target) ? lo : hi;
+    
+    // Group frequencies by their integer value (what would be stored in NVS)
+    const freqsByIntValue = new Map<number, number[]>();
+    
+    ramp.forEach(freq => {
+      const intValue = Math.floor(freq);
+      if (!freqsByIntValue.has(intValue)) {
+        freqsByIntValue.set(intValue, []);
+      }
+      freqsByIntValue.get(intValue)!.push(freq);
+    });
+    
+    // Log each group that has multiple frequencies
+    freqsByIntValue.forEach((freqs, intValue) => {
+      if (freqs.length > 1) {
+        console.debug(`Integer ${intValue} has ${freqs.length} frequencies: ${freqs.join(', ')}`);
+      }
+    });
+    
+    // Find frequencies with the same integer value, which would be duplicates in NVS
+    const nvsDuplicates: number[] = [];
+    freqsByIntValue.forEach((freqs, intValue) => {
+      if (freqs.length > 1) {
+        // Add all but the first frequency to the duplicates list
+        nvsDuplicates.push(...freqs.slice(1));
+      }
+    });
+    
+    if (nvsDuplicates.length > 0) {
+      // Only show first 50 duplicates to keep the log manageable
+      const displayCount = Math.min(50, nvsDuplicates.length);
+      console.warn(`Found ${nvsDuplicates.length} frequencies that will be duplicates when stored in NVS. First ${displayCount}: ${nvsDuplicates.slice(0, displayCount).join(', ')}. These have the same integer part as other frequencies.`);
     }
-
-    if (dir > 0 && ramp[idx] <= current && idx + 1 < ramp.length) idx++;
-    if (dir < 0 && ramp[idx] >= current && idx - 1 >= 0) idx--;
-
-    return ramp[idx] ?? current;
+    
+    // Find exact match by value if possible
+    const exactIndex = ramp.indexOf(current);
+    if (exactIndex !== -1) {
+      return ramp[exactIndex];
+    }
+    
+    // Fallback to finding the first frequency with the same integer value
+    const flooredCurrent = Math.floor(current);
+    const matchingFreqs = freqsByIntValue.get(flooredCurrent);
+    
+    return matchingFreqs?.[0] ?? current;
   }
 
-  /** Walk one slot up or down the ramp (for the “±” buttons). */
+
+  /** Walk one slot up or down the ramp (for the "±" buttons). */
   private stepByIndex(current: number, step: 1 | -1): number {
     const ramp = this.sortedFreqs;
     if (!ramp.length || !step) return current;
@@ -624,7 +647,7 @@ export class EditComponent implements OnInit, OnDestroy {
   }
 
 
-  /** Move by ≈ delta MHz, then snap to the closest ramp value on the correct side. */
+  /** Move by ≈ delta MHz, then snap to the closest ramp value on the correct side. */
   private stepByDelta(current: number, deltaMHz: number): number {
     const ramp = this.sortedFreqs;
     if (!ramp.length || deltaMHz === 0) return current;
