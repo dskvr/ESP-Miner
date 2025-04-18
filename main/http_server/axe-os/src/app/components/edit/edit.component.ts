@@ -743,50 +743,43 @@ export class EditComponent implements OnInit, OnDestroy {
   }
 
   // Color calculation methods
-  getFrequencyColor(): string {
-    const currentFreq = this.form?.get('frequency')?.value;
-    if (!currentFreq) return 'var(--primary-color)';
+  private getValueColor(controlName: string, currentValue: number | null): string {
+    if (!currentValue) return 'var(--primary-color)';
     
-    const defaultFreq = this.defaultFrequency[this.ASICModel];
-    const maxFreq = this.maxFrequency[this.ASICModel];
-    const minFreq = this.minFrequency[this.ASICModel];
+    const defaultValue = controlName === 'frequency' ? 
+      this.defaultFrequency[this.ASICModel] : 
+      this.defaultVoltage[this.ASICModel];
+      
+    const maxValue = controlName === 'frequency' ?
+      this.maxFrequency[this.ASICModel] :
+      this.maxVoltage[this.ASICModel];
+      
+    const minValue = controlName === 'frequency' ?
+      this.minFrequency[this.ASICModel] :
+      this.minVoltage[this.ASICModel];
     
-    if (currentFreq === defaultFreq) {
-      return '#22c55e'; // Green for default
-    } else if (currentFreq < defaultFreq) {
+    if (currentValue === defaultValue) {
+      return '#22c55e'; // default
+    } else if (currentValue < defaultValue) {
       // Scale from blue (min) to green (default)
-      const percentage = (currentFreq - minFreq) / (defaultFreq - minFreq);
+      const percentage = (currentValue - minValue) / (defaultValue - minValue);
       return this.interpolateColor('#3b82f6', '#22c55e', percentage);
     } else {
       // Scale from green (default) to red (max)
-      const percentage = (currentFreq - defaultFreq) / (maxFreq - defaultFreq);
+      const percentage = (currentValue - defaultValue) / (maxValue - defaultValue);
       return this.interpolateColor('#22c55e', '#ef4444', percentage);
     }
+  }
+
+  getFrequencyColor(): string {
+    return this.getValueColor('frequency', this.form?.get('frequency')?.value);
   }
   
   getVoltageColor(): string {
-    const currentVoltage = this.form?.get('coreVoltage')?.value;
-    if (!currentVoltage) return 'var(--primary-color)';
-    
-    const defaultVoltage = this.defaultVoltage[this.ASICModel];
-    const maxVoltage = this.maxVoltage[this.ASICModel];
-    const minVoltage = this.minVoltage[this.ASICModel];
-    
-    if (currentVoltage === defaultVoltage) {
-      return '#22c55e'; // Green for default
-    } else if (currentVoltage < defaultVoltage) {
-      // Scale from blue (min) to green (default)
-      const percentage = (currentVoltage - minVoltage) / (defaultVoltage - minVoltage);
-      return this.interpolateColor('#3b82f6', '#22c55e', percentage);
-    } else {
-      // Scale from green (default) to red (max)
-      const percentage = (currentVoltage - defaultVoltage) / (maxVoltage - defaultVoltage);
-      return this.interpolateColor('#22c55e', '#ef4444', percentage);
-    }
+    return this.getValueColor('coreVoltage', this.form?.get('coreVoltage')?.value);
   }
   
   private interpolateColor(color1: string, color2: string, percentage: number): string {
-    // Ensure percentage is between 0 and 1
     const clampedPercentage = Math.max(0, Math.min(1, percentage));
     
     // Convert hex to RGB
@@ -837,22 +830,12 @@ export class EditComponent implements OnInit, OnDestroy {
       } else {
         this.presets = [];
       }
-      
-      // Add the built-in default preset
       this.presets.unshift(this.createDefaultPreset());
-      
-      // Sort by most recent first, but keep built-in presets at the top
-      this.presets.sort((a, b) => {
-        // Keep built-in presets at the top
-        if (a.builtIn && !b.builtIn) return -1;
-        if (!a.builtIn && b.builtIn) return 1;
-        // Otherwise sort by timestamp (most recent first)
-        return b.timestamp - a.timestamp;
-      });
+      this.sortPresets()
     } catch (error) {
       console.error('Error loading presets from localStorage', error);
       this.toastr.error('Failed to load saved presets', 'Error');
-      // Ensure we at least have the default preset
+
       this.presets = [this.createDefaultPreset()];
     }
   }
@@ -862,20 +845,16 @@ export class EditComponent implements OnInit, OnDestroy {
    */
   savePresetsToStorage(): void {
     try {
-      // Get all existing presets for all models
       let allPresets: OverclockPreset[] = [];
       const presetsJson = localStorage.getItem('overclockPresets');
       if (presetsJson) {
         allPresets = JSON.parse(presetsJson);
-        // Remove presets for current model as we'll add updated ones
         allPresets = allPresets.filter(preset => preset.asicModel !== this.ASICModel);
       }
       
-      // Add current model's presets, but filter out built-in presets
       const userPresets = this.presets.filter(preset => !preset.builtIn);
       allPresets = [...allPresets, ...userPresets];
-      
-      // Save back to localStorage
+    
       localStorage.setItem('overclockPresets', JSON.stringify(allPresets));
     } catch (error) {
       console.error('Error saving presets to localStorage', error);
@@ -934,15 +913,11 @@ export class EditComponent implements OnInit, OnDestroy {
       this.toastr.error('Please enter a name for the preset', 'Error');
       return;
     }
-    
     const formValues = this.form.getRawValue();
-    
     if (this.editingPreset) {
-      // Editing existing preset - just update the name
       this.editingPreset.name = this.presetName.trim();
       this.toastr.success(`Preset name updated to "${this.presetName}"`, 'Success');
     } else {
-      // Create new preset
       const newPreset: OverclockPreset = {
         name: this.presetName.trim(),
         frequency: formValues.frequency,
@@ -951,26 +926,17 @@ export class EditComponent implements OnInit, OnDestroy {
         asicModel: this.ASICModel
       };
       
-      // Check if a preset with this name already exists
       const existingIndex = this.presets.findIndex(p => p.name === newPreset.name);
       if (existingIndex >= 0) {
-        // Replace existing preset
         this.presets[existingIndex] = newPreset;
       } else {
-        // Add new preset
         this.presets.push(newPreset);
       }
       
       this.toastr.success(`Preset "${this.presetName}" saved successfully`, 'Success');
     }
-    
-    // Sort by most recent, keeping built-ins at top
     this.sortPresets();
-    
-    // Save to localStorage
     this.savePresetsToStorage();
-    
-    // Close dialog
     this.showPresetDialog = false;
     this.editingPreset = null;
   }
@@ -983,7 +949,6 @@ export class EditComponent implements OnInit, OnDestroy {
       // Keep built-in presets at the top
       if (a.builtIn && !b.builtIn) return -1;
       if (!a.builtIn && b.builtIn) return 1;
-      // Otherwise sort by timestamp (most recent first)
       return b.timestamp - a.timestamp;
     });
   }
@@ -1013,13 +978,11 @@ export class EditComponent implements OnInit, OnDestroy {
    * Apply settings from a preset
    */
   applyPreset(preset: OverclockPreset): void {
-    // Update form with preset values
     this.form.patchValue({
       frequency: preset.frequency,
       coreVoltage: preset.coreVoltage
     });
     
-    // Mark form as dirty to enable save button
     this.form.markAsDirty();
     
     this.toastr.info(`Applied preset "${preset.name}"`, 'Preset Applied');
@@ -1029,21 +992,14 @@ export class EditComponent implements OnInit, OnDestroy {
    * Delete a preset
    */
   deletePreset(preset: OverclockPreset, event: Event): void {
-    // Stop the click event from propagating to parent (which would apply the preset)
     event.stopPropagation();
-    
-    // Skip deletion for built-in presets
     if (preset.builtIn) {
       this.toastr.error(`Cannot delete built-in preset "${preset.name}"`, 'Error');
       return;
     }
     
-    // Remove the preset
     this.presets = this.presets.filter(p => p.name !== preset.name);
-    
-    // Save updated presets to localStorage
     this.savePresetsToStorage();
-    
     this.toastr.success(`Deleted preset "${preset.name}"`, 'Success');
   }
   
@@ -1065,14 +1021,12 @@ export class EditComponent implements OnInit, OnDestroy {
       return false;
     }
     
-    // Get the actual frequency using the getter
     const actualFreq = this.actualFrequency;
     
     // Use a small epsilon for floating point comparison
     const epsilon = 0.01;
     const diff = Math.abs(inputFreq - actualFreq);
     
-    // Show indicator if difference is more than epsilon
     return diff > epsilon;
   }
 }
