@@ -548,11 +548,16 @@ export class EditComponent implements OnInit, OnDestroy {
   }
 
   private buildRamp(raw: number[]): number[] {
-    return raw
-      .map(f => this.calculateActualFrequency(f))
-      .filter(f => f !== null)
-      .filter((f, i, arr) => arr.indexOf(f) === i)
-      .sort((a, b) => a - b);
+    return Array.from(
+      new Set(
+        raw
+          .map(f => this.calculateActualFrequency(f))
+          .filter(f => f !== null)
+          .map(f => Math.floor(f))
+          .filter((f, i, arr) => arr.indexOf(f) === i)
+          .sort((a, b) => a - b)
+      )
+    );
   }
 
   /** Sorted, cached frequency ramp for current model */
@@ -682,7 +687,11 @@ export class EditComponent implements OnInit, OnDestroy {
     let next = current;
   
     if (controlName === 'frequency') {
+      if(amount === 1 || amount === -1) {
+        next = this.stepByIndex(current, amount);
+      } else {
         next = this.stepByDelta(current, amount);
+      }
       next = this.clamp(
         next,
         this.minFrequency[this.ASICModel],
