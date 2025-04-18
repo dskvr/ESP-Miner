@@ -224,7 +224,6 @@ export class EditComponent implements OnInit, OnDestroy {
   public warningAcknowledged: boolean = false;
 
   private destroy$ = new Subject<void>();
-  // private static readonly FREQ_TOLERANCE = 1;
   private sortedFreqCache = new Map<eASICModel, number[]>();
   private readonly STORAGE_KEY_WARNING = 'overclockWarningAcknowledged';
 
@@ -549,20 +548,22 @@ export class EditComponent implements OnInit, OnDestroy {
     }
   }
 
+  private buildRamp(raw: number[]): number[] {
+    return raw
+      .map(f => this.calculateActualFrequency(f))
+      .filter(f => f !== null)
+      .filter((f, i, arr) => arr.indexOf(f) === i)
+      .sort((a, b) => a - b);
+  }
+
   /** Sorted, cached frequency ramp for current model */
   private get sortedFreqs(): number[] {
     let ramp = this.sortedFreqCache.get(this.ASICModel);
     if (!ramp) {
-      ramp = [...(this.validFrequencies[this.ASICModel] ?? [])].sort((a, b) => a - b);
+      ramp = this.buildRamp(this.validFrequencies[this.ASICModel]);
       this.sortedFreqCache.set(this.ASICModel, ramp);
     }
     return ramp;
-  }
-
-  /** True if the synthesizer will hit the requested value closely enough */
-  private isSynthesizable(freq: number): boolean {
-    const actual = this.calculateActualFrequency(freq);
-    return actual !== null && Math.abs(actual - freq) <= 1;
   }
 
   /** Clamp helper */
@@ -580,64 +581,48 @@ export class EditComponent implements OnInit, OnDestroy {
     return lo;
   }
 
-  /** Walk ±1 step in the ramp (used for +/- buttons) */
-  private stepByIndex(current: number, steps: 1 | -1): number {
+  /** Walk one slot up or down the ramp (for the “±” buttons). */
+  private stepByIndex(current: number, step: 1 | -1): number {
     const ramp = this.sortedFreqs;
-    if (!ramp.length) return current;
+    if (!ramp.length || !step) return current;
 
     let i = this.lowerBound(ramp, current);
 
-    if (steps < 0 && i > 0 && ramp[i] === current) i--;
-
-    i += steps;
-    if (i < 0 || i >= ramp.length) return current;
-
-    while (i >= 0 && i < ramp.length) {
-      if (this.isSynthesizable(ramp[i])) return ramp[i];
-      i += steps;
+    if (i < ramp.length && ramp[i] === current) {
+      i += step;
+    } else if (step < 0) {
+      i -= 1;
     }
-    return current;
+
+    return i >= 0 && i < ramp.length ? ramp[i] : current;
   }
 
-  /** Move by a delta in MHz (used for +10 / +25 / +50 / +100 buttons) */
-  private stepByDelta(current: number, deltaMHz: number): number {
-    console.log('stepByDelta', current, deltaMHz);
 
+  /** Move by ≈ delta MHz, then snap to the closest ramp value on the correct side. */
+  private stepByDelta(current: number, deltaMHz: number): number {
     const ramp = this.sortedFreqs;
     if (!ramp.length || deltaMHz === 0) return current;
 
     const target = current + deltaMHz;
-    const dir = Math.sign(deltaMHz);
-    let bestIdx = -1;
-    let bestDiff = Number.MAX_VALUE;
+    const dir    = Math.sign(deltaMHz);
 
-    let left = this.lowerBound(ramp, target) - 1;
-    let right = left + 1;
+    let hi = this.lowerBound(ramp, target);
+    let lo = hi - 1;
 
-    const check = (idx: number): void => {
-      const f = ramp[idx];
-      if (!this.isSynthesizable(f)) return;
-      if ((dir > 0 && f <= current) || (dir < 0 && f >= current)) return;
-      const diff = Math.abs(f - target);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        bestIdx = idx;
-      }
-    };
-
-    while (left >= 0 || right < ramp.length) {
-      if (left >= 0) check(left--);
-      if (right < ramp.length) check(right++);
-      if (left >= 0 && Math.abs(ramp[left] - target) < bestDiff) continue;
-      if (right < ramp.length && Math.abs(ramp[right] - target) < bestDiff) continue;
-      break;
+    let idx: number;
+    if (lo < 0) {
+      idx = hi;
+    } else if (hi >= ramp.length) {
+      idx = lo;
+    } else {
+      idx = Math.abs(ramp[lo] - target) <= Math.abs(ramp[hi] - target) ? lo : hi;
     }
 
-    const value = bestIdx >= 0 ? ramp[bestIdx] : current;
-    const actual = this.calculateActualFrequency(value);
-    return actual && current !== actual? actual: value;
-  }
+    if (dir > 0 && ramp[idx] <= current && idx + 1 < ramp.length) idx++;
+    if (dir < 0 && ramp[idx] >= current && idx - 1 >= 0) idx--;
 
+    return ramp[idx] ?? current;
+  }
 
   /** Public entry point – now blissfully short */
   incrementValue(controlName: string, amount: number): void {
@@ -648,11 +633,7 @@ export class EditComponent implements OnInit, OnDestroy {
     let next = current;
   
     if (controlName === 'frequency') {
-      // if (amount === 1 || amount === -1) {
-      //   next = this.stepByIndex(current, amount as 1 | -1);
-      // } else {
         next = this.stepByDelta(current, amount);
-      // }
       next = this.clamp(
         next,
         this.minFrequency[this.ASICModel],
