@@ -90,6 +90,22 @@ export class EditComponent implements OnInit, OnDestroy {
     return [...this.incrementOptions].reverse();
   }
 
+  // Valid frequencies for each ASIC model
+  public validFrequencies: { [key in eASICModel]: number[] } = {
+    [eASICModel.BM1366]: [],
+    [eASICModel.BM1368]: [],
+    [eASICModel.BM1370]: [],
+    [eASICModel.BM1397]: []
+  };
+
+  // Use a getter for actual frequency instead of a property
+  public get actualFrequency(): number {
+    if (!this.form?.get('frequency')?.value) {
+      return 0;
+    }
+    return this.calculateActualFrequency(this.form.get('frequency')?.value);
+  }
+
   // Preset management
   public presetName: string = '';
   public presets: OverclockPreset[] = [];
@@ -271,6 +287,9 @@ export class EditComponent implements OnInit, OnDestroy {
       .subscribe(info => {
         this.ASICModel = info.ASICModel;
 
+        // Generate valid frequencies for this ASIC model
+        this.generateValidFrequencies();
+
         // Check if overclock is enabled in NVS
         if (info.overclockEnabled === 1) {
           this.settingsUnlocked = true;
@@ -310,6 +329,261 @@ export class EditComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /**
+   * Generate all valid frequencies for the current ASIC model
+   * This pre-calculates all possible frequencies that can be achieved
+   */
+  generateValidFrequencies(): void {
+    const min = this.minFrequency[this.ASICModel];
+    const max = this.maxFrequency[this.ASICModel];
+    const step = 1; // 1MHz increments for calculation
+    
+    const frequencies: number[] = [];
+    for (let freq = min; freq <= max; freq += step) {
+      const actualFreq = this.calculateActualFrequency(freq);
+      // Only add if it's a unique value
+      if (!frequencies.includes(actualFreq)) {
+        frequencies.push(actualFreq);
+      }
+    }
+    
+    // Sort ascending
+    frequencies.sort((a, b) => a - b);
+    this.validFrequencies[this.ASICModel] = frequencies;
+    
+    console.log(`Generated ${frequencies.length} valid frequencies for ${this.ASICModel}`);
+  }
+
+  /**
+   * Calculate the actual frequency that will be set for a given target frequency
+   * Port of the C function to TypeScript
+   */
+  calculateActualFrequency(targetFreq: number): number {
+    // Each chip model has different calculation methods
+    switch (this.ASICModel) {
+      case eASICModel.BM1370:
+        return this.calculateBM1370Frequency(targetFreq);
+      case eASICModel.BM1366:
+        return this.calculateBM1366Frequency(targetFreq);
+      case eASICModel.BM1368:
+        return this.calculateBM1368Frequency(targetFreq);
+      case eASICModel.BM1397:
+        return this.calculateBM1397Frequency(targetFreq);
+      default:
+        return targetFreq; // Fallback to original input
+    }
+  }
+
+  /**
+   * Calculate the actual frequency for BM1370 chip
+   * Direct port of the C function
+   */
+  calculateBM1370Frequency(targetFreq: number): number {
+    let fbDivider = 0;
+    let postDivider1 = 0, postDivider2 = 0;
+    let refDivider = 0;
+    let minDifference = 10;
+    const maxDiff = 1.0;
+    let newFreq = 200.0; // default 200MHz
+
+    // refdiver is 2 or 1
+    // postdivider 2 is 1 to 7
+    // postdivider 1 is 1 to 7 and greater than or equal to postdivider 2
+    // fbdiv is 0xa0 to 0xef
+    for (let refDivLoop = 2; refDivLoop > 0 && fbDivider === 0; refDivLoop--) {
+      for (let postDiv1Loop = 7; postDiv1Loop > 0 && fbDivider === 0; postDiv1Loop--) {
+        for (let postDiv2Loop = 7; postDiv2Loop > 0 && fbDivider === 0; postDiv2Loop--) {
+          if (postDiv1Loop >= postDiv2Loop) {
+            const tempFbDivider = Math.round((postDiv1Loop * postDiv2Loop * targetFreq * refDivLoop) / 25.0);
+
+            if (tempFbDivider >= 0xa0 && tempFbDivider <= 0xef) {
+              const tempFreq = 25.0 * tempFbDivider / (refDivLoop * postDiv2Loop * postDiv1Loop);
+              const freqDiff = Math.abs(targetFreq - tempFreq);
+
+              if (freqDiff < minDifference && freqDiff < maxDiff) {
+                fbDivider = tempFbDivider;
+                postDivider1 = postDiv1Loop;
+                postDivider2 = postDiv2Loop;
+                refDivider = refDivLoop;
+                minDifference = freqDiff;
+                newFreq = tempFreq;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (fbDivider === 0) {
+      console.warn(`Failed to find PLL settings for target frequency ${targetFreq.toFixed(2)}`);
+      return targetFreq; // Return the target as fallback
+    }
+
+    return parseFloat(newFreq.toFixed(2)); // Round to 2 decimal places for display
+  }
+
+  /**
+   * Calculate the actual frequency for BM1366 chip
+   * Direct port of the C function
+   */
+  calculateBM1366Frequency(targetFreq: number): number {
+    let fbDivider = 0;
+    let postDivider1 = 0, postDivider2 = 0;
+    let refDivider = 0;
+    let minDifference = 10;
+    let newFreq = 200.0; // default 200MHz
+
+    // refdiver is 2 or 1
+    // postdivider 2 is 1 to 7
+    // postdivider 1 is 1 to 7 and less than postdivider 2
+    // fbdiv is 144 to 235
+    for (let refDivLoop = 2; refDivLoop > 0 && fbDivider === 0; refDivLoop--) {
+      for (let postDiv1Loop = 7; postDiv1Loop > 0 && fbDivider === 0; postDiv1Loop--) {
+        for (let postDiv2Loop = 1; postDiv2Loop < postDiv1Loop && fbDivider === 0; postDiv2Loop++) {
+          const tempFbDivider = Math.round((postDiv1Loop * postDiv2Loop * targetFreq * refDivLoop) / 25.0);
+
+          if (tempFbDivider >= 144 && tempFbDivider <= 235) {
+            const tempFreq = 25.0 * tempFbDivider / (refDivLoop * postDiv2Loop * postDiv1Loop);
+            const freqDiff = Math.abs(targetFreq - tempFreq);
+
+            if (freqDiff < minDifference) {
+              fbDivider = tempFbDivider;
+              postDivider1 = postDiv1Loop;
+              postDivider2 = postDiv2Loop;
+              refDivider = refDivLoop;
+              minDifference = freqDiff;
+              newFreq = tempFreq;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (fbDivider === 0) {
+      console.warn(`Failed to find PLL settings for target frequency ${targetFreq.toFixed(2)}, using default (200MHz)`);
+      return 200.0;
+    }
+
+    return parseFloat(newFreq.toFixed(2)); // Round to 2 decimal places for display
+  }
+
+  /**
+   * Calculate the actual frequency for BM1368 chip
+   * Direct port of the C function
+   */
+  calculateBM1368Frequency(targetFreq: number): number {
+    const maxDiff = 0.001;
+    let postdivMin = 255;
+    let postdiv2Min = 255;
+    let bestFreq = 0;
+    let bestRefDiv = 0, bestFbDiv = 0, bestPostDiv1 = 0, bestPostDiv2 = 0;
+    let found = false;
+
+    for (let refDiv = 2; refDiv > 0; refDiv--) {
+      for (let postDiv1 = 7; postDiv1 > 0; postDiv1--) {
+        for (let postDiv2 = 7; postDiv2 > 0; postDiv2--) {
+          const fbDivider = Math.round(targetFreq / 25.0 * (refDiv * postDiv2 * postDiv1));
+          const newFreq = 25.0 * fbDivider / (refDiv * postDiv2 * postDiv1);
+
+          if (fbDivider >= 144 && fbDivider <= 235 &&
+              Math.abs(targetFreq - newFreq) < maxDiff &&
+              postDiv1 >= postDiv2 &&
+              postDiv1 * postDiv2 < postdivMin &&
+              postDiv2 <= postdiv2Min) {
+
+            postdiv2Min = postDiv2;
+            postdivMin = postDiv1 * postDiv2;
+            bestFreq = newFreq;
+            bestRefDiv = refDiv;
+            bestFbDiv = fbDivider;
+            bestPostDiv1 = postDiv1;
+            bestPostDiv2 = postDiv2;
+            found = true;
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      console.warn(`Didn't find PLL settings for target frequency ${targetFreq.toFixed(2)}`);
+      return targetFreq; // Return the target as fallback
+    }
+
+    return parseFloat(bestFreq.toFixed(2)); // Round to 2 decimal places for display
+  }
+
+  /**
+   * Calculate the actual frequency for BM1397 chip
+   * Direct port of the C function
+   */
+  calculateBM1397Frequency(targetFreq: number): number {
+    const FREQ_MULT = 25.0;
+    const defFreq = 200.0;
+    
+    // Limit frequency range
+    let f1 = targetFreq;
+    if (f1 < 50) {
+      f1 = 50;
+    } else if (f1 > 650) {
+      f1 = 650;
+    }
+
+    let fb = 2;
+    let fc1 = 1;
+    let fc2 = 5; // initial multiplier of 10
+    
+    if (f1 >= 500) {
+      // halve down to '250-400'
+      fb = 1;
+    } else if (f1 <= 150) {
+      // triple up to '300-450'
+      fc1 = 3;
+    } else if (f1 <= 250) {
+      // double up to '300-500'
+      fc1 = 2;
+    }
+    // else f1 is 250-500
+
+    // f1 * fb * fc1 * fc2 is between 2500 and 6500
+    // - so round up to the next 25 (FREQ_MULT)
+    const baseFreq = FREQ_MULT * Math.ceil(f1 * fb * fc1 * fc2 / FREQ_MULT);
+
+    // fa should be between 0x10 (16) and 0x104 (260)
+    const fa = baseFreq / FREQ_MULT;
+    const faMin = 0x10;
+    const faMax = 0x104;
+
+    // code failure ... baseFreq isn't 400 to 6000
+    if (fa < faMin || fa > faMax) {
+      return defFreq;
+    } else {
+      const newFreq = baseFreq / (fb * fc1 * fc2);
+      return parseFloat(newFreq.toFixed(2)); // Round to 2 decimal places for display
+    }
+  }
+
+  /**
+   * Find the next valid frequency in the sequence
+   */
+  findNextValidFrequency(current: number, increment: boolean): number {
+    const validFreqs = this.validFrequencies[this.ASICModel];
+    if (!validFreqs || validFreqs.length === 0) {
+      // If no valid frequencies calculated, fall back to the original behavior
+      return increment ? current + 1 : current - 1;
+    }
+    
+    // Find the nearest valid frequency that's greater/less than current
+    if (increment) {
+      const next = validFreqs.find(freq => freq > current);
+      return next !== undefined ? next : current;
+    } else {
+      // Find largest frequency less than current
+      const prev = [...validFreqs].reverse().find(freq => freq < current);
+      return prev !== undefined ? prev : current;
+    }
   }
 
   public updateSystem() {
@@ -429,19 +703,36 @@ export class EditComponent implements OnInit, OnDestroy {
     return options;
   }
 
-  // New methods for incremental adjustment
+  // Modified to use valid frequencies
   incrementValue(controlName: string, amount: number): void {
     const control = this.form.get(controlName);
     if (!control) return;
     
     let currentValue = control.value || 0;
-    let newValue = currentValue + amount;
+    let newValue;
     
-    // Apply min/max constraints
     if (controlName === 'frequency') {
-      newValue = Math.min(Math.max(newValue, this.minFrequency[this.ASICModel]), this.maxFrequency[this.ASICModel]);
-    } else if (controlName === 'coreVoltage') {
-      newValue = Math.min(Math.max(newValue, this.minVoltage[this.ASICModel]), this.maxVoltage[this.ASICModel]);
+      // For frequency, find the next valid frequency in the sequence
+      if (amount > 0) {
+        // If incrementing by more than 1, try to find a valid frequency about that much higher
+        const targetValue = currentValue + amount;
+        newValue = this.validFrequencies[this.ASICModel].find(f => f >= targetValue) || 
+                  this.validFrequencies[this.ASICModel][this.validFrequencies[this.ASICModel].length - 1];
+      } else {
+        // If decrementing, find a valid frequency about that much lower
+        const targetValue = currentValue + amount; // amount is negative
+        // Reverse search to find highest freq below target
+        newValue = [...this.validFrequencies[this.ASICModel]].reverse().find(f => f <= targetValue) ||
+                  this.validFrequencies[this.ASICModel][0];
+      }
+    } else {
+      // For other controls (like voltage), use simple addition
+      newValue = currentValue + amount;
+      
+      // Apply min/max constraints for voltage
+      if (controlName === 'coreVoltage') {
+        newValue = Math.min(Math.max(newValue, this.minVoltage[this.ASICModel]), this.maxVoltage[this.ASICModel]);
+      }
     }
     
     control.setValue(newValue);
@@ -759,5 +1050,26 @@ export class EditComponent implements OnInit, OnDestroy {
   cancelSavePreset(): void {
     this.showPresetDialog = false;
     this.editingPreset = null;
+  }
+
+  /**
+   * Determine if the actual frequency indicator should be shown
+   * Handles floating point precision issues in comparison
+   */
+  shouldShowFrequencyIndicator(): boolean {
+    const inputFreq = this.form?.get('frequency')?.value;
+    if (!inputFreq) {
+      return false;
+    }
+    
+    // Get the actual frequency using the getter
+    const actualFreq = this.actualFrequency;
+    
+    // Use a small epsilon for floating point comparison
+    const epsilon = 0.01;
+    const diff = Math.abs(inputFreq - actualFreq);
+    
+    // Show indicator if difference is more than epsilon
+    return diff > epsilon;
   }
 }
