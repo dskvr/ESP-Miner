@@ -263,16 +263,15 @@
         <label for="presetName">Preset Name</label>
         <input type="text" pInputText id="presetName" [(ngModel)]="presetName" style="width: 100%" />
     </div>
-    <div class="current-settings-preview" *ngIf="!editingPreset">
+    <div class="current-settings-preview" *ngIf="!editingPreset && form">
         <div class="preview-item">
             <label>Frequency:</label>
-            <span>{{ form?.get('frequency')?.value || 0 }} MHz</span>
+            <span>{{ form.get('frequency')?.value || 0 }} MHz</span>
         </div>
         <div class="preview-item">
             <label>Core Voltage:</label>
-            <span>{{ form?.get('coreVoltage')?.value || 0 }} mV</span>
+            <span>{{ form.get('coreVoltage')?.value || 0 }} mV</span>
         </div>
-
     </div>
     <ng-template pTemplate="footer">
         <button pButton pRipple label="Cancel" icon="pi pi-times" class="p-button" (click)="cancelSavePreset()"></button>

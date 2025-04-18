@@ -8,14 +8,13 @@ import { SystemService } from 'src/app/services/system.service';
 import { eASICModel } from 'src/models/enum/eASICModel';
 import { ActivatedRoute } from '@angular/router';
 
-// Preset interface
 interface OverclockPreset {
   name: string;
   frequency: number;
   coreVoltage: number;
   timestamp: number;
   asicModel: eASICModel;
-  builtIn?: boolean; // Flag for built-in presets that cannot be deleted
+  builtIn?: boolean;
 }
 
 @Component({
@@ -24,6 +23,8 @@ interface OverclockPreset {
   styleUrls: ['./edit.component.scss']
 })
 export class EditComponent implements OnInit, OnDestroy {
+
+
 
   public form!: FormGroup;
 
@@ -37,7 +38,6 @@ export class EditComponent implements OnInit, OnDestroy {
   public restrictedModels: eASICModel[] = Object.values(eASICModel)
     .filter((v): v is eASICModel => typeof v === 'string');
 
-  // Default values for different ASIC models
   public defaultFrequency: { [key in eASICModel]: number } = {
     [eASICModel.BM1366]: 485,
     [eASICModel.BM1368]: 490,
@@ -52,11 +52,10 @@ export class EditComponent implements OnInit, OnDestroy {
     [eASICModel.BM1397]: 1300
   };
 
-  // Maximum values for different ASIC models
   public maxFrequency: { [key in eASICModel]: number } = {
-    [eASICModel.BM1366]: 650,
-    [eASICModel.BM1368]: 650,
-    [eASICModel.BM1370]: 925,
+    [eASICModel.BM1366]: 700,
+    [eASICModel.BM1368]: 700,
+    [eASICModel.BM1370]: 950,
     [eASICModel.BM1397]: 675
   };
 
@@ -67,12 +66,11 @@ export class EditComponent implements OnInit, OnDestroy {
     [eASICModel.BM1397]: 1550
   };
 
-  // Minimum values for different ASIC models
   public minFrequency: { [key in eASICModel]: number } = {
-    [eASICModel.BM1366]: 200,
-    [eASICModel.BM1368]: 200,
-    [eASICModel.BM1370]: 200,
-    [eASICModel.BM1397]: 200
+    [eASICModel.BM1366]: 50,
+    [eASICModel.BM1368]: 50,
+    [eASICModel.BM1370]: 50,
+    [eASICModel.BM1397]: 50
   };
 
   public minVoltage: { [key in eASICModel]: number } = {
@@ -82,15 +80,12 @@ export class EditComponent implements OnInit, OnDestroy {
     [eASICModel.BM1397]: 900
   };
 
-  // Increment options for buttons
   public incrementOptions = [1, 10, 25, 50, 100];
   
-  // Get reversed increment options for decrement buttons
   public get reversedIncrementOptions(): number[] {
     return [...this.incrementOptions].reverse();
   }
 
-  // Valid frequencies for each ASIC model
   public validFrequencies: { [key in eASICModel]: number[] } = {
     [eASICModel.BM1366]: [],
     [eASICModel.BM1368]: [],
@@ -98,15 +93,17 @@ export class EditComponent implements OnInit, OnDestroy {
     [eASICModel.BM1397]: []
   };
 
-  // Use a getter for actual frequency instead of a property
   public get actualFrequency(): number {
     if (!this.form?.get('frequency')?.value) {
+      return this.defaultFrequency[this.ASICModel];
+    }
+    const actual = this.calculateActualFrequency(this.form.get('frequency')?.value);
+    if (!actual) {
       return 0;
     }
-    return this.calculateActualFrequency(this.form.get('frequency')?.value);
+    return actual;
   }
 
-  // Preset management
   public presetName: string = '';
   public presets: OverclockPreset[] = [];
   public showPresetDialog: boolean = false;
@@ -224,11 +221,11 @@ export class EditComponent implements OnInit, OnDestroy {
     { name: '1250', value: 1250 },
     { name: '1300', value: 1300 },
   ];
+  public warningAcknowledged: boolean = false;
 
   private destroy$ = new Subject<void>();
-
-  // Warning acknowledgment
-  public warningAcknowledged: boolean = false;
+  // private static readonly FREQ_TOLERANCE = 1;
+  private sortedFreqCache = new Map<eASICModel, number[]>();
   private readonly STORAGE_KEY_WARNING = 'overclockWarningAcknowledged';
 
   constructor(
@@ -238,11 +235,9 @@ export class EditComponent implements OnInit, OnDestroy {
     private loadingService: LoadingService,
     private route: ActivatedRoute,
   ) {
-    // Check URL parameter for settings unlock
     this.route.queryParams.subscribe(params => {
       const urlOcParam = params['oc'] !== undefined;
       if (urlOcParam) {
-        // If ?oc is in URL, enable overclock and save to NVS
         this.settingsUnlocked = true;
         this.saveOverclockSetting(1);
         console.log(
@@ -252,7 +247,6 @@ export class EditComponent implements OnInit, OnDestroy {
           '⚠️ Remember: with great power comes great responsibility!'
         );
       } else {
-        // If ?oc is not in URL, check NVS setting (will be loaded in ngOnInit)
         console.log('🔒 Here be dragons! Advanced settings are locked for your protection. \n' +
           'Only the bravest miners dare to venture forth... \n' +
           'If you wish to unlock dangerous overclocking powers, add: %c?oc',
@@ -276,7 +270,6 @@ export class EditComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    // Check if warning has been acknowledged
     this.warningAcknowledged = localStorage.getItem(this.STORAGE_KEY_WARNING) === 'true';
 
     this.systemService.getInfo(this.uri)
@@ -287,10 +280,8 @@ export class EditComponent implements OnInit, OnDestroy {
       .subscribe(info => {
         this.ASICModel = info.ASICModel;
 
-        // Generate valid frequencies for this ASIC model
         this.generateValidFrequencies();
 
-        // Check if overclock is enabled in NVS
         if (info.overclockEnabled === 1) {
           this.settingsUnlocked = true;
           console.log(
@@ -323,7 +314,6 @@ export class EditComponent implements OnInit, OnDestroy {
           }
         });
         
-        // Load saved presets
         this.loadPresets();
       });
   }
@@ -341,39 +331,38 @@ export class EditComponent implements OnInit, OnDestroy {
     const min = this.minFrequency[this.ASICModel];
     const max = this.maxFrequency[this.ASICModel];
     
-    // Use finer granularity for all chips to catch more valid frequencies
-    const step = 0.5; // 0.5MHz increments for more precise calculation
+    const step = 0.01;
     
     const frequencies: number[] = [];
     
-    // Use the same approach for all chip models
     for (let freq = min; freq <= max; freq += step) {
       const actualFreq = this.calculateActualFrequency(freq);
       
-      // Only add frequencies where the calculated value matches the input value
-      // This ensures we only have frequencies that won't show an indicator
-      const epsilon = 0.01; // Small tolerance for floating point comparison
-      if (Math.abs(actualFreq - freq) < epsilon) {
-        // Only add if it's a unique value
-        if (!frequencies.includes(actualFreq)) {
-          frequencies.push(actualFreq);
-        }
+      const isValid = this.ASICModel === eASICModel.BM1370 
+        ? actualFreq !== null && Math.abs(actualFreq - freq) <= 0.5
+        : actualFreq !== null;
+      
+      const roundedFreq = parseFloat(actualFreq?.toFixed(2) ?? '0');
+      
+      if (isValid && !frequencies.some(f => Math.abs(f - roundedFreq) < 0.01)) {
+        frequencies.push(roundedFreq);
       }
     }
     
-    // Sort ascending
     frequencies.sort((a, b) => a - b);
     this.validFrequencies[this.ASICModel] = frequencies;
     
     console.log(`Generated ${frequencies.length} valid frequencies for ${this.ASICModel}`);
+    if (frequencies.length > 0) {
+      console.log(`Range: ${frequencies[0]} - ${frequencies[frequencies.length - 1]} MHz`);
+    }
   }
 
   /**
    * Calculate the actual frequency that will be set for a given target frequency
    * Port of the C function to TypeScript
    */
-  calculateActualFrequency(targetFreq: number): number {
-    // Each chip model has different calculation methods
+  calculateActualFrequency(targetFreq: number): number | null {
     switch (this.ASICModel) {
       case eASICModel.BM1370:
         return this.calculateBM1370Frequency(targetFreq);
@@ -384,7 +373,7 @@ export class EditComponent implements OnInit, OnDestroy {
       case eASICModel.BM1397:
         return this.calculateBM1397Frequency(targetFreq);
       default:
-        return targetFreq; // Fallback to original input
+        return targetFreq;
     }
   }
 
@@ -392,18 +381,14 @@ export class EditComponent implements OnInit, OnDestroy {
    * Calculate the actual frequency for BM1370 chip
    * Direct port of the C function
    */
-  calculateBM1370Frequency(targetFreq: number): number {
+  calculateBM1370Frequency(targetFreq: number): number | null {
     let fbDivider = 0;
     let postDivider1 = 0, postDivider2 = 0;
     let refDivider = 0;
     let minDifference = 10;
     const maxDiff = 1.0;
-    let newFreq = 200.0; // default 200MHz
+    let newFreq = 50.0;
 
-    // refdiver is 2 or 1
-    // postdivider 2 is 1 to 7
-    // postdivider 1 is 1 to 7 and greater than or equal to postdivider 2
-    // fbdiv is 0xa0 to 0xef
     for (let refDivLoop = 2; refDivLoop > 0 && fbDivider === 0; refDivLoop--) {
       for (let postDiv1Loop = 7; postDiv1Loop > 0 && fbDivider === 0; postDiv1Loop--) {
         for (let postDiv2Loop = 7; postDiv2Loop > 0 && fbDivider === 0; postDiv2Loop--) {
@@ -429,28 +414,26 @@ export class EditComponent implements OnInit, OnDestroy {
     }
 
     if (fbDivider === 0) {
-      console.warn(`Failed to find PLL settings for target frequency ${targetFreq.toFixed(2)}`);
-      return targetFreq; // Return the target as fallback
+      console.warn(
+        `PLL cannot synthesise ${targetFreq.toFixed(2)} MHz (≥1 MHz off everywhere)`
+      );
+      return null; 
     }
 
-    return parseFloat(newFreq.toFixed(2)); // Round to 2 decimal places for display
+    return +newFreq.toFixed(2); 
   }
 
   /**
    * Calculate the actual frequency for BM1366 chip
    * Direct port of the C function
    */
-  calculateBM1366Frequency(targetFreq: number): number {
+  calculateBM1366Frequency(targetFreq: number): number | null {
     let fbDivider = 0;
     let postDivider1 = 0, postDivider2 = 0;
     let refDivider = 0;
     let minDifference = 10;
-    let newFreq = 200.0; // default 200MHz
+    let newFreq = 200.0;
 
-    // refdiver is 2 or 1
-    // postdivider 2 is 1 to 7
-    // postdivider 1 is 1 to 7 and less than postdivider 2
-    // fbdiv is 144 to 235
     for (let refDivLoop = 2; refDivLoop > 0 && fbDivider === 0; refDivLoop--) {
       for (let postDiv1Loop = 7; postDiv1Loop > 0 && fbDivider === 0; postDiv1Loop--) {
         for (let postDiv2Loop = 1; postDiv2Loop < postDiv1Loop && fbDivider === 0; postDiv2Loop++) {
@@ -475,18 +458,17 @@ export class EditComponent implements OnInit, OnDestroy {
     }
 
     if (fbDivider === 0) {
-      console.warn(`Failed to find PLL settings for target frequency ${targetFreq.toFixed(2)}, using default (200MHz)`);
-      return 200.0;
+      console.warn(`PLL cannot synthesise ${targetFreq.toFixed(2)} MHz on BM1366`);
+      return null;
     }
-
-    return parseFloat(newFreq.toFixed(2)); // Round to 2 decimal places for display
+    return +newFreq.toFixed(3);
   }
 
   /**
    * Calculate the actual frequency for BM1368 chip
    * Direct port of the C function
    */
-  calculateBM1368Frequency(targetFreq: number): number {
+  calculateBM1368Frequency(targetFreq: number): number | null {
     const maxDiff = 0.001;
     let postdivMin = 255;
     let postdiv2Min = 255;
@@ -520,11 +502,10 @@ export class EditComponent implements OnInit, OnDestroy {
     }
 
     if (!found) {
-      console.warn(`Didn't find PLL settings for target frequency ${targetFreq.toFixed(2)}`);
-      return targetFreq; // Return the target as fallback
+      console.warn(`PLL cannot synthesise ${targetFreq.toFixed(2)} MHz on BM1368`);
+      return null;
     }
-
-    return parseFloat(bestFreq.toFixed(2)); // Round to 2 decimal places for display
+    return +bestFreq.toFixed(3);
   }
 
   /**
@@ -535,7 +516,6 @@ export class EditComponent implements OnInit, OnDestroy {
     const FREQ_MULT = 25.0;
     const defFreq = 200.0;
     
-    // Limit frequency range
     let f1 = targetFreq;
     if (f1 < 50) {
       f1 = 50;
@@ -545,108 +525,152 @@ export class EditComponent implements OnInit, OnDestroy {
 
     let fb = 2;
     let fc1 = 1;
-    let fc2 = 5; // initial multiplier of 10
+    let fc2 = 5;
     
     if (f1 >= 500) {
-      // halve down to '250-400'
       fb = 1;
     } else if (f1 <= 150) {
-      // triple up to '300-450'
       fc1 = 3;
     } else if (f1 <= 250) {
-      // double up to '300-500'
       fc1 = 2;
     }
-    // else f1 is 250-500
 
-    // f1 * fb * fc1 * fc2 is between 2500 and 6500
-    // - so round up to the next 25 (FREQ_MULT)
     const baseFreq = FREQ_MULT * Math.ceil(f1 * fb * fc1 * fc2 / FREQ_MULT);
 
-    // fa should be between 0x10 (16) and 0x104 (260)
     const fa = baseFreq / FREQ_MULT;
     const faMin = 0x10;
     const faMax = 0x104;
 
-    // code failure ... baseFreq isn't 400 to 6000
     if (fa < faMin || fa > faMax) {
       return defFreq;
     } else {
       const newFreq = baseFreq / (fb * fc1 * fc2);
-      return parseFloat(newFreq.toFixed(2)); // Round to 2 decimal places for display
+      return parseFloat(newFreq.toFixed(2));
     }
   }
 
-  // Modified to use the same approach for all chip models
+  /** Sorted, cached frequency ramp for current model */
+  private get sortedFreqs(): number[] {
+    let ramp = this.sortedFreqCache.get(this.ASICModel);
+    if (!ramp) {
+      ramp = [...(this.validFrequencies[this.ASICModel] ?? [])].sort((a, b) => a - b);
+      this.sortedFreqCache.set(this.ASICModel, ramp);
+    }
+    return ramp;
+  }
+
+  /** True if the synthesizer will hit the requested value closely enough */
+  private isSynthesizable(freq: number): boolean {
+    const actual = this.calculateActualFrequency(freq);
+    return actual !== null && Math.abs(actual - freq) <= 1;
+  }
+
+  /** Clamp helper */
+  private clamp(v: number, lo: number, hi: number): number {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+
+  /** Binary search: first index ≥ value */
+  private lowerBound(arr: number[], value: number): number {
+    let lo = 0, hi = arr.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      arr[mid] < value ? (lo = mid + 1) : (hi = mid);
+    }
+    return lo;
+  }
+
+  /** Walk ±1 step in the ramp (used for +/- buttons) */
+  private stepByIndex(current: number, steps: 1 | -1): number {
+    const ramp = this.sortedFreqs;
+    if (!ramp.length) return current;
+
+    let i = this.lowerBound(ramp, current);
+
+    if (steps < 0 && i > 0 && ramp[i] === current) i--;
+
+    i += steps;
+    if (i < 0 || i >= ramp.length) return current;
+
+    while (i >= 0 && i < ramp.length) {
+      if (this.isSynthesizable(ramp[i])) return ramp[i];
+      i += steps;
+    }
+    return current;
+  }
+
+  /** Move by a delta in MHz (used for +10 / +25 / +50 / +100 buttons) */
+  private stepByDelta(current: number, deltaMHz: number): number {
+    const ramp = this.sortedFreqs;
+    if (!ramp.length || deltaMHz === 0) return current;
+
+    const target = current + deltaMHz;
+    const dir = Math.sign(deltaMHz);
+    let bestIdx = -1;
+    let bestDiff = Number.MAX_VALUE;
+
+    let left = this.lowerBound(ramp, target) - 1;
+    let right = left + 1;
+
+    const check = (idx: number): void => {
+      const f = ramp[idx];
+      if (!this.isSynthesizable(f)) return;
+      if ((dir > 0 && f <= current) || (dir < 0 && f >= current)) return;
+      const diff = Math.abs(f - target);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = idx;
+      }
+    };
+
+    while (left >= 0 || right < ramp.length) {
+      if (left >= 0) check(left--);
+      if (right < ramp.length) check(right++);
+      if (left >= 0 && Math.abs(ramp[left] - target) < bestDiff) continue;
+      if (right < ramp.length && Math.abs(ramp[right] - target) < bestDiff) continue;
+      break;
+    }
+
+    return bestIdx >= 0 ? ramp[bestIdx] : current;
+  }
+
+
+  /** Public entry point – now blissfully short */
   incrementValue(controlName: string, amount: number): void {
     const control = this.form.get(controlName);
-    if (!control) return;
-    
-    let currentValue = control.value || 0;
-    let newValue;
-    
+    if (!control || !amount) return;
+  
+    const current = Number(control.value) || 0;
+    let next = current;
+  
     if (controlName === 'frequency') {
-      // Use the same approach for all chip models
-      const validFreqs = this.validFrequencies[this.ASICModel];
-      
-      if (validFreqs && validFreqs.length > 0) {
-        // For large steps, try to find frequency closest to the target amount
-        const targetValue = currentValue + amount;
-        
-        if (amount > 0) {
-          // If incrementing, find the valid frequency that's closest to or above the target
-          // If nothing found, use the highest available
-          const candidateFreqs = validFreqs.filter(f => f >= targetValue);
-          newValue = candidateFreqs.length > 0 ? 
-                     candidateFreqs[0] : 
-                     validFreqs[validFreqs.length - 1];
-        } else {
-          // If decrementing, find the valid frequency that's closest to or below the target
-          // If nothing found, use the lowest available
-          const candidateFreqs = validFreqs.filter(f => f <= targetValue);
-          newValue = candidateFreqs.length > 0 ?
-                     candidateFreqs[candidateFreqs.length - 1] :
-                     validFreqs[0];
-        }
-      } else {
-        // Fallback if valid frequencies aren't available
-        newValue = currentValue + amount;
-        newValue = Math.min(Math.max(newValue, this.minFrequency[this.ASICModel]), this.maxFrequency[this.ASICModel]);
-      }
+      // if (amount === 1 || amount === -1) {
+      //   next = this.stepByIndex(current, amount as 1 | -1);
+      // } else {
+        next = this.stepByDelta(current, amount);
+      // }
+      next = this.clamp(
+        next,
+        this.minFrequency[this.ASICModel],
+        this.maxFrequency[this.ASICModel],
+      );
+    } else if (controlName === 'coreVoltage') {
+      next = this.clamp(
+        current + amount,
+        this.minVoltage[this.ASICModel],
+        this.maxVoltage[this.ASICModel],
+      );
     } else {
-      // For other controls (like voltage), use simple addition
-      newValue = currentValue + amount;
-      
-      // Apply min/max constraints for voltage
-      if (controlName === 'coreVoltage') {
-        newValue = Math.min(Math.max(newValue, this.minVoltage[this.ASICModel]), this.maxVoltage[this.ASICModel]);
-      }
+      next = current + amount;
     }
-    
-    // Check if the value has actually changed
-    if (newValue !== currentValue) {
-      // Use form.patchValue instead of control.setValue to ensure change detection works
-      const patchObj: any = {};
-      patchObj[controlName] = newValue;
-      
-      // Update the form value
-      this.form.patchValue(patchObj);
-      
-      // Explicitly mark form as dirty using setTimeout to ensure it runs after Angular's change detection
-      setTimeout(() => {
-        // Mark the specific control as dirty
-        control.markAsDirty();
-        
-        // Also mark the whole form as dirty
-        this.form.markAsDirty();
-        
-        // Force change detection if needed
-        this.form.updateValueAndValidity();
-      });
-    }
+  
+    if (next === current) return;
+  
+    this.form.patchValue({ [controlName]: next });
+    control.markAsDirty();
+    this.form.markAsDirty();
   }
-
-  // Color calculation methods
+  
   private getValueColor(controlName: string, currentValue: number | null): string {
     if (!currentValue) return 'var(--primary-color)';
     
@@ -663,18 +687,16 @@ export class EditComponent implements OnInit, OnDestroy {
       this.minVoltage[this.ASICModel];
     
     if (currentValue === defaultValue) {
-      return '#22c55e'; // default
+      return '#22c55e';
     } else if (currentValue < defaultValue) {
-      // Scale from blue (min) to green (default)
       const percentage = (currentValue - minValue) / (defaultValue - minValue);
       return this.interpolateColor('#3b82f6', '#22c55e', percentage);
     } else {
-      // Scale from green (default) to red (max)
       const percentage = (currentValue - defaultValue) / (maxValue - defaultValue);
       return this.interpolateColor('#22c55e', '#ef4444', percentage);
     }
   }
-
+  
   getFrequencyColor(): string {
     return this.getValueColor('frequency', this.form?.get('frequency')?.value);
   }
@@ -686,7 +708,6 @@ export class EditComponent implements OnInit, OnDestroy {
   private interpolateColor(color1: string, color2: string, percentage: number): string {
     const clampedPercentage = Math.max(0, Math.min(1, percentage));
     
-    // Convert hex to RGB
     const r1 = parseInt(color1.substring(1, 3), 16);
     const g1 = parseInt(color1.substring(3, 5), 16);
     const b1 = parseInt(color1.substring(5, 7), 16);
@@ -695,16 +716,13 @@ export class EditComponent implements OnInit, OnDestroy {
     const g2 = parseInt(color2.substring(3, 5), 16);
     const b2 = parseInt(color2.substring(5, 7), 16);
     
-    // Interpolate
     const r = Math.round(r1 + (r2 - r1) * clampedPercentage);
     const g = Math.round(g1 + (g2 - g1) * clampedPercentage);
     const b = Math.round(b1 + (b2 - b1) * clampedPercentage);
     
-    // Convert back to hex
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
-  // Preset Management Methods
   
   /**
    * Create a default preset with factory values
@@ -714,7 +732,7 @@ export class EditComponent implements OnInit, OnDestroy {
       name: `Factory Default (${this.ASICModel})`,
       frequency: this.defaultFrequency[this.ASICModel],
       coreVoltage: this.defaultVoltage[this.ASICModel],
-      timestamp: 0, // Always keep at the top by using lowest timestamp
+      timestamp: 0,
       asicModel: this.ASICModel,
       builtIn: true
     };
@@ -727,9 +745,7 @@ export class EditComponent implements OnInit, OnDestroy {
     try {
       const presetsJson = localStorage.getItem('overclockPresets');
       if (presetsJson) {
-        // Load user-created presets
         this.presets = JSON.parse(presetsJson);
-        // Filter presets for current ASIC model
         this.presets = this.presets.filter(preset => preset.asicModel === this.ASICModel);
       } else {
         this.presets = [];
@@ -758,7 +774,7 @@ export class EditComponent implements OnInit, OnDestroy {
       
       const userPresets = this.presets.filter(preset => !preset.builtIn);
       allPresets = [...allPresets, ...userPresets];
-    
+      
       localStorage.setItem('overclockPresets', JSON.stringify(allPresets));
     } catch (error) {
       console.error('Error saving presets to localStorage', error);
@@ -766,7 +782,6 @@ export class EditComponent implements OnInit, OnDestroy {
     }
   }
   
-  // Get the currently selected preset based on form values
   public get selectedPreset(): OverclockPreset | null {
     if (!this.form) return null;
     
@@ -781,14 +796,12 @@ export class EditComponent implements OnInit, OnDestroy {
     ) || null;
   }
   
-  // Check if current values match any existing preset
   public get hasMatchingPreset(): boolean {
     return this.selectedPreset !== null;
   }
   
-  // Open dialog for editing a preset name
   public editPresetName(preset: OverclockPreset, event: Event): void {
-    event.stopPropagation(); // Prevent preset from being applied
+    event.stopPropagation();
     
     if (preset.builtIn) {
       this.toastr.error(`Cannot edit built-in preset "${preset.name}"`, 'Error');
@@ -850,7 +863,6 @@ export class EditComponent implements OnInit, OnDestroy {
    */
   private sortPresets(): void {
     this.presets.sort((a, b) => {
-      // Keep built-in presets at the top
       if (a.builtIn && !b.builtIn) return -1;
       if (!a.builtIn && b.builtIn) return 1;
       return b.timestamp - a.timestamp;
@@ -882,35 +894,12 @@ export class EditComponent implements OnInit, OnDestroy {
    * Apply settings from a preset
    */
   applyPreset(preset: OverclockPreset): void {
-    // Current values before applying preset
-    const currentFreq = this.form.get('frequency')?.value;
-    const currentVoltage = this.form.get('coreVoltage')?.value;
-    
-    // Update form with preset values
     this.form.patchValue({
       frequency: preset.frequency,
       coreVoltage: preset.coreVoltage
     });
     
-    // Check if values actually changed
-    if (currentFreq !== preset.frequency || currentVoltage !== preset.coreVoltage) {
-      // Explicitly mark form as dirty using setTimeout to ensure it runs after Angular's change detection
-      setTimeout(() => {
-        // Mark specific controls as dirty
-        if (currentFreq !== preset.frequency) {
-          this.form.get('frequency')?.markAsDirty();
-        }
-        if (currentVoltage !== preset.coreVoltage) {
-          this.form.get('coreVoltage')?.markAsDirty();
-        }
-        
-        // Also mark the whole form as dirty
-        this.form.markAsDirty();
-        
-        // Force change detection if needed
-        this.form.updateValueAndValidity();
-      });
-    }
+    this.form.markAsDirty();
     
     this.toastr.info(`Applied preset "${preset.name}"`, 'Preset Applied');
   }
@@ -950,7 +939,6 @@ export class EditComponent implements OnInit, OnDestroy {
     
     const actualFreq = this.actualFrequency;
     
-    // Use a small epsilon for floating point comparison
     const epsilon = 0.01;
     const diff = Math.abs(inputFreq - actualFreq);
     
@@ -963,22 +951,20 @@ export class EditComponent implements OnInit, OnDestroy {
   findNextValidFrequency(current: number, increment: boolean): number {
     const validFreqs = this.validFrequencies[this.ASICModel];
     if (!validFreqs || validFreqs.length === 0) {
-      // If no valid frequencies calculated, fall back to the original behavior
       return increment ? current + 1 : current - 1;
     }
     
-    // Find the nearest valid frequency that's greater/less than current
     if (increment) {
       const next = validFreqs.find(freq => freq > current);
       return next !== undefined ? next : current;
     } else {
-      // Find largest frequency less than current
       const prev = [...validFreqs].reverse().find(freq => freq < current);
       return prev !== undefined ? prev : current;
     }
   }
 
   public updateSystem() {
+    console.log('Form dirty state before submission:', this.form.dirty);
 
     const form = this.form.getRawValue();
 
@@ -986,13 +972,23 @@ export class EditComponent implements OnInit, OnDestroy {
       delete form.stratumPassword;
     }
 
-    this.systemService.updateSystem(this.uri, form)
+    const formData = {
+      ...form,
+      flipscreen: form.flipscreen === true ? 1 : 0,
+      invertscreen: form.invertscreen === true ? 1 : 0,
+      autofanspeed: form.autofanspeed === true ? 1 : 0,
+    };
+
+    this.systemService.updateSystem(this.uri, formData)
       .pipe(this.loadingService.lockUIUntilComplete())
       .subscribe({
         next: () => {
           const successMessage = this.uri ? `Saved settings for ${this.uri}` : 'Saved settings';
           this.toastr.success(successMessage, 'Success!');
           this.savedChanges = true;
+          
+          const currentValues = this.form.getRawValue();
+          this.form.reset(currentValues);
         },
         error: (err: HttpErrorResponse) => {
           const errorMessage = this.uri ? `Could not save settings for ${this.uri}. ${err.message}` : `Could not save settings. ${err.message}`;
@@ -1042,7 +1038,6 @@ export class EditComponent implements OnInit, OnDestroy {
   }
 
   getDropdownFrequency() {
-    // Get base frequency options based on ASIC model
     let options = [];
     switch(this.ASICModel) {
         case this.eASICModel.BM1366: options = [...this.BM1366DropdownFrequency]; break;
@@ -1052,16 +1047,13 @@ export class EditComponent implements OnInit, OnDestroy {
         default: return [];
     }
 
-    // Get current frequency value from form
     const currentFreq = this.form?.get('frequency')?.value;
 
-    // If current frequency exists and isn't in the options
     if (currentFreq && !options.some(opt => opt.value === currentFreq)) {
         options.push({
             name: `${currentFreq} (Custom)`,
             value: currentFreq
         });
-        // Sort options by frequency value
         options.sort((a, b) => a.value - b.value);
     }
 
@@ -1069,7 +1061,6 @@ export class EditComponent implements OnInit, OnDestroy {
   }
 
   getCoreVoltage() {
-    // Get base voltage options based on ASIC model
     let options = [];
     switch(this.ASICModel) {
         case this.eASICModel.BM1366: options = [...this.BM1366CoreVoltage]; break;
@@ -1079,16 +1070,13 @@ export class EditComponent implements OnInit, OnDestroy {
         default: return [];
     }
 
-    // Get current voltage value from form
     const currentVoltage = this.form?.get('coreVoltage')?.value;
 
-    // If current voltage exists and isn't in the options
     if (currentVoltage && !options.some(opt => opt.value === currentVoltage)) {
         options.push({
             name: `${currentVoltage} (Custom)`,
             value: currentVoltage
         });
-        // Sort options by voltage value
         options.sort((a, b) => a.value - b.value);
     }
 
